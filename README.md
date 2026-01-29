@@ -106,7 +106,19 @@ data_manager.load_endf_file(
 
 ## Examples
 
-See `example.py` for a complete demonstration of the API features.
+- **`example.py`**: Basic usage showing the complete workflow
+- **`example_advanced.py`**: Advanced customization with custom physics and hooks
+- **`ENDF_GUIDE.md`**: Comprehensive guide for using ENDF nuclear data files
+
+Run the basic example:
+```bash
+python example.py
+```
+
+Run the advanced customization example:
+```bash
+python example_advanced.py
+```
 
 ## Legacy Code
 
