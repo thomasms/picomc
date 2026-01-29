@@ -213,6 +213,80 @@ dm.load_library_file(
 )
 ```
 
+## Testing
+
+### Running Tests
+
+The project includes comprehensive unit and integration tests using pytest:
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with coverage report
+pytest tests/ --cov=picomc --cov-report=term-missing
+
+# Run only unit tests
+pytest tests/unit/
+
+# Run specific test file
+pytest tests/test_csg.py -v
+
+# Run tests with specific markers
+pytest tests/ -m unit
+```
+
+### Development Setup
+
+Install development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+This installs:
+- pytest and pytest-cov for testing
+- flake8 for linting
+- black for code formatting
+
+### Linting and Formatting
+
+```bash
+# Check code style
+flake8 picomc
+
+# Format code with black
+black picomc tests
+
+# Check formatting without changes
+black --check picomc tests
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for CI. Every push and pull request runs:
+- Tests on Python 3.8, 3.9, 3.10, and 3.11
+- Code linting with flake8
+- Code formatting check with black
+- Coverage reporting
+
+See `.github/workflows/ci.yml` for details.
+
+### Test Structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures
+├── test_csg.py           # CSG geometry tests (12 tests)
+├── test_neutron_box.py   # Integration tests (3 tests)
+└── unit/
+    ├── test_data.py      # Nuclear data tests (10 tests)
+    ├── test_particle.py  # Particle class tests (10 tests)
+    └── test_physics.py   # Physics engine tests (14 tests)
+```
+
+Total: **49 tests** with good code coverage.
+
 ## Legacy Code
 
 The original simple implementation is preserved in `picomc.py` for reference.
