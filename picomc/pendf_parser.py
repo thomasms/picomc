@@ -9,7 +9,7 @@ This implementation uses the endf-parserpy package for robust ENDF-6 format pars
 """
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict
 import warnings
 import logging
 
@@ -132,9 +132,7 @@ class PENDFParser:
         if 1 in mf3:
             mt1 = mf3[1]
             data["energies"], data["total"] = self._extract_tab1_data(mt1)
-            logger.debug(
-                f"Extracted MT=1 (total): {len(data['energies'])} points"
-            )
+            logger.debug(f"Extracted MT=1 (total): {len(data['energies'])} points")
 
         # MT=2: Elastic scattering
         if 2 in mf3:
@@ -169,9 +167,7 @@ class PENDFParser:
 
         if inelastic_sum is not None:
             data["inelastic"] = inelastic_sum
-            logger.debug(
-                f"Extracted inelastic (MT=51-91): {len(data['inelastic'])} points"
-            )
+            logger.debug(f"Extracted inelastic (MT=51-91): {len(data['inelastic'])} points")
 
         # Ensure all arrays are the same length (use energy grid length)
         n_points = len(data["energies"])
@@ -186,7 +182,7 @@ class PENDFParser:
                 if len(data[key]) > 0:
                     data[key] = np.interp(
                         data["energies"],
-                        data["energies"][:len(data[key])],
+                        data["energies"][: len(data[key])],
                         data[key],
                         left=0.0,
                         right=0.0,
@@ -240,9 +236,7 @@ class PENDFParser:
                             return x, y
 
             # If we reach here, we couldn't find the data
-            logger.warning(
-                f"Could not extract TAB1 data. Available keys: {list(mt_dict.keys())}"
-            )
+            logger.warning(f"Could not extract TAB1 data. Available keys: {list(mt_dict.keys())}")
             return np.array([]), np.array([])
 
         except Exception as e:
@@ -260,4 +254,3 @@ class PENDFParser:
             "fission": np.array([]),
             "nu": np.array([]),
         }
-
