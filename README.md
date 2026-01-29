@@ -1,12 +1,19 @@
 # Pico MC
 
-A modular, pythonic Monte Carlo simulator for neutron transport with ENDF data support.
+A modular, pythonic Monte Carlo simulator for neutron transport with ENDF/PENDF data support and CSG geometry.
 
 ## Features
 
 - **Modular Architecture**: Separate modules for geometry, physics, transport, tallying, and nuclear data
 - **Pythonic API**: Clean interfaces inspired by Geant4, with no input deck requirements
-- **ENDF Integration**: Support for reading nuclear data from ENDF files using endf-parserpy
+- **Nuclear Data Support**: 
+  - **PENDF** format (processed, linearized data) - **Recommended**
+  - **ENDF** format (raw evaluated data)
+  - Library-agnostic: works with JEFF, ENDF/B, JENDL, etc.
+- **CSG Geometry**: Constructive Solid Geometry similar to Serpent and OpenMC
+  - Surface primitives: planes, spheres, cylinders
+  - Boolean operations for complex geometries
+  - Cell-based material definitions
 - **Customizable**: Hook system for overriding logic at event and step levels
 - **Extensible**: Easy to add new geometries, physics processes, and tallies
 
@@ -16,11 +23,13 @@ A modular, pythonic Monte Carlo simulator for neutron transport with ENDF data s
 # Basic installation
 pip install -e .
 
-# With ENDF support
+# With ENDF support (optional)
 pip install -e ".[endf]"
 ```
 
 ## Quick Start
+
+### Using Simple Geometry
 
 ```python
 import numpy as np
@@ -28,8 +37,8 @@ from picomc import Simulator, BoxGeometry, NuclearDataManager, FluxTally
 from picomc.geometry import VoxelizedGeometry
 
 # Setup nuclear data
-data_manager = NuclearDataManager(use_endf=False)
-data_manager._add_default_material('default', number_density=0.1)
+data_manager = NuclearDataManager()
+data_manager.add_material('default', number_density=0.05)
 
 # Create geometry
 geometry = BoxGeometry(size=100.0, material='default')
@@ -53,19 +62,69 @@ results = sim.get_results()
 print(results['statistics'])
 ```
 
+### Using CSG Geometry (Serpent/OpenMC style)
+
+```python
+from picomc import Simulator, NuclearDataManager, CSGGeometryWrapper
+from picomc.csg import CSGGeometry, CSGCell, HalfSpace, Sphere, Plane
+import numpy as np
+
+# Load nuclear data (PENDF format recommended)
+dm = NuclearDataManager()
+dm.load_pendf_file('path/to/n-092_U_235.pendf', 'U235', 0.048)
+# Or use default data for testing:
+# dm.add_material('U235', number_density=0.048)
+
+# Create CSG geometry
+csg = CSGGeometry()
+
+# Define sphere target
+sphere = Sphere(1, center=np.array([25, 25, 25]), radius=10)
+csg.add_surface(sphere)
+
+# Create cell with material
+cell = CSGCell(1, material='U235')
+cell.add_region(HalfSpace(sphere, -1))  # Inside sphere
+csg.add_cell(cell)
+
+# Wrap and simulate
+geometry = CSGGeometryWrapper(csg)
+sim = Simulator(geometry, dm)
+
+particles = sim.create_point_source(np.array([25, 25, 25]), 1000, energy=2.0e6)
+sim.add_source_particles(particles)
+sim.run()
+```
+
 ## Package Structure
 
 ```
 picomc/
 ├── __init__.py       # Package entry point
 ├── particle.py       # Particle and Event classes
-├── geometry.py       # Geometry definitions
+├── geometry.py       # Geometry definitions (box, voxelized, CSG wrapper)
+├── csg.py           # CSG primitives and operations
 ├── physics.py        # Physics interactions
 ├── transport.py      # Transport engine
-├── data.py          # Nuclear data management
+├── data.py          # Nuclear data management (ENDF/PENDF)
+├── pendf_parser.py  # PENDF format parser
 ├── tally.py         # Scoring and tallies
 └── simulator.py     # Main simulator orchestrator
 ```
+
+## Nuclear Data Libraries
+
+### JEFF 4.0 PENDF (Recommended)
+
+Download from OECD-NEA: https://data.oecd-nea.org/records/wgw94-qcx30
+
+```python
+dm = NuclearDataManager()
+dm.load_pendf_file('jeff40/pendf/n-092_U_235.pendf', 'U235', 0.048, temperature=293.6)
+```
+
+PENDF files contain processed, linearized cross sections ready for Monte Carlo use.
+Works with any library: JEFF, ENDF/B, JENDL, etc.
 
 ## Customization
 
@@ -88,36 +147,70 @@ def my_post_step_hook(particle, event):
 sim.transport.post_step_hook = my_post_step_hook
 ```
 
-## Using ENDF Data
+## Examples and Tests
 
-To use real nuclear data from ENDF files:
-
-```python
-# Create data manager with ENDF support
-data_manager = NuclearDataManager(use_endf=True)
-
-# Load ENDF file for a specific isotope
-data_manager.load_endf_file(
-    'path/to/n-092_U_235.endf',
-    material_name='U235',
-    number_density=0.048  # atoms/barn-cm
-)
-```
-
-## Examples
+### Examples
 
 - **`example.py`**: Basic usage showing the complete workflow
 - **`example_advanced.py`**: Advanced customization with custom physics and hooks
-- **`ENDF_GUIDE.md`**: Comprehensive guide for using ENDF nuclear data files
+- **`example_pendf_csg.py`**: PENDF data with CSG geometry
+- **`ENDF_GUIDE.md`**: Comprehensive guide for nuclear data files
 
-Run the basic example:
+Run examples:
 ```bash
 python example.py
+python example_advanced.py
+python example_pendf_csg.py
 ```
 
-Run the advanced customization example:
+### Tests
+
+Verify functionality:
 ```bash
-python example_advanced.py
+# Test CSG geometry primitives
+python tests/test_csg.py
+
+# Test neutron transport with various geometries
+python tests/test_neutron_box.py
+```
+
+## Using Nuclear Data
+
+### PENDF Format (Recommended)
+
+```python
+# Load JEFF 4.0 PENDF data
+dm = NuclearDataManager()
+dm.load_pendf_file(
+    'path/to/jeff40/pendf/n-092_U_235.pendf',
+    material_name='U235',
+    number_density=0.048,  # atoms/barn-cm
+    temperature=293.6      # Kelvin
+)
+```
+
+### ENDF Format
+
+```python
+# Load raw ENDF data (requires endf-parserpy)
+dm = NuclearDataManager(use_endf=True)
+dm.load_endf_file(
+    'path/to/n-092_U_235.endf',
+    material_name='U235',
+    number_density=0.048
+)
+```
+
+### Auto-Detect Format
+
+```python
+# Automatically detect format from filename
+dm.load_library_file(
+    filepath='path/to/data.pendf',
+    material_name='U235',
+    number_density=0.048,
+    file_format='auto'  # or 'endf', 'pendf', 'ace'
+)
 ```
 
 ## Legacy Code
