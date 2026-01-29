@@ -30,7 +30,8 @@ class CrossSectionData:
         if len(self.energies) == 0:
             return {'total': 0.0, 'elastic': 0.0, 'capture': 0.0, 'fission': 0.0}
         
-        # Linear interpolation in log-log space for better accuracy
+        # Linear interpolation
+        # Note: log-log interpolation could be added for better accuracy
         xs = {}
         if len(self.energies) > 1:
             xs['total'] = np.interp(energy, self.energies, self.total)
@@ -128,10 +129,16 @@ class NuclearDataManager:
             
         except Exception as e:
             warnings.warn(f"Error loading ENDF file: {e}\nUsing default data")
-            self._add_default_material(material_name, number_density)
+            self.add_material(material_name, number_density)
     
-    def _add_default_material(self, material_name: str, number_density: float = 1.0):
-        """Add a material with default cross sections (for testing/demo)"""
+    def add_material(self, material_name: str, number_density: float = 1.0):
+        """
+        Add a material with default cross sections (for testing/demo)
+        
+        Args:
+            material_name: Name for the material
+            number_density: Number density in atoms/barn-cm
+        """
         xs_data = CrossSectionData()
         
         # Create simple energy grid (eV)
@@ -149,6 +156,11 @@ class NuclearDataManager:
             'number_density': number_density
         }
     
+    # Keep old name for backwards compatibility
+    def _add_default_material(self, material_name: str, number_density: float = 1.0):
+        """Deprecated: Use add_material() instead"""
+        self.add_material(material_name, number_density)
+    
     def get_material_xs(self, material: str, energy: float) -> Dict[str, float]:
         """
         Get cross sections for a material at given energy
@@ -162,7 +174,7 @@ class NuclearDataManager:
         """
         if material not in self.materials:
             warnings.warn(f"Material {material} not found, adding default")
-            self._add_default_material(material)
+            self.add_material(material)
         
         xs_data = self.materials[material]['xs_data']
         return xs_data.get_xs_at_energy(energy)

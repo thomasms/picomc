@@ -54,15 +54,17 @@ class BoxGeometry(Geometry):
         for i in range(3):
             if direction[i] > 1e-10:
                 dist_bound = (self.size - position[i]) / direction[i]
-                distances.append(dist_bound)
+                if dist_bound > 0:
+                    distances.append(dist_bound)
             elif direction[i] < -1e-10:
                 dist_bound = -position[i] / direction[i]
-                distances.append(dist_bound)
+                if dist_bound > 0:
+                    distances.append(dist_bound)
         
         if not distances:
             return np.inf
         
-        return min(d for d in distances if d > 0)
+        return min(distances)
     
     def get_material(self, position: np.ndarray) -> Optional[str]:
         """Get material at position (if inside)"""

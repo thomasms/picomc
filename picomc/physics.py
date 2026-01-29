@@ -7,6 +7,12 @@ from typing import Dict, Optional, List
 from picomc.particle import Particle, Event
 from picomc.data import NuclearDataManager
 
+# Physical constants
+NEUTRON_MASS_ENERGY_FACTOR = 5.227e-9  # E(eV) = NEUTRON_MASS_ENERGY_FACTOR * v(cm/s)^2
+DEFAULT_NU = 2.5  # Average neutrons per fission for U-235
+FISSION_ENERGY_SCALE = 1.0e6  # eV, exponential scale for fission spectrum
+FISSION_ENERGY_MIN = 0.5e6  # eV, minimum fission neutron energy
+
 
 class PhysicsEngine:
     """
@@ -104,7 +110,7 @@ class PhysicsEngine:
             # Absorption - particle dies
             particle.alive = False
             
-        elif interaction_type == 'fission':
+        else:  # fission
             # Fission - particle dies, create secondaries
             particle.alive = False
             num_neutrons = self.sample_fission_neutrons()
@@ -120,7 +126,8 @@ class PhysicsEngine:
                     direction,
                     energy,
                     particle.weight,
-                    particle.time
+                    particle.time,
+                    is_source=False  # Fission secondaries are not source particles
                 )
                 event.add_secondary(secondary)
         
@@ -143,23 +150,25 @@ class PhysicsEngine:
         return np.array([dx, dy, dz])
     
     def sample_fission_neutrons(self) -> int:
-        """Sample number of fission neutrons (nu)"""
-        # Simplified: Poisson distribution with mean 2.5
-        # In reality, should use nubar from ENDF data
-        return np.random.poisson(2.5)
+        """
+        Sample number of fission neutrons (nu)
+        
+        Uses Poisson distribution with DEFAULT_NU.
+        In reality, should use nubar from ENDF data.
+        """
+        return np.random.poisson(DEFAULT_NU)
     
     def sample_fission_energy(self) -> float:
         """
         Sample fission neutron energy
         
+        Uses simplified exponential + offset distribution.
+        Real implementation should use Watt spectrum from ENDF data.
+        
         Returns:
             Energy in eV
         """
-        # Simplified Watt spectrum approximation
-        # Peak around 2 MeV for U-235
-        # For now, use simple sampling around 2 MeV
-        # Real implementation should use Watt or other spectrum from ENDF
-        return np.random.exponential(1.0e6) + 0.5e6  # ~0.5-3 MeV typical
+        return np.random.exponential(FISSION_ENERGY_SCALE) + FISSION_ENERGY_MIN
     
     def get_velocity(self, energy: float) -> float:
         """
@@ -172,6 +181,5 @@ class PhysicsEngine:
             Velocity in cm/s
         """
         # E = 0.5 * m * v^2
-        # For neutrons: E(eV) = 5.227e-9 * v(cm/s)^2
-        # So: v = sqrt(E / 5.227e-9)
-        return np.sqrt(energy / 5.227e-9)
+        # For neutrons: E(eV) = NEUTRON_MASS_ENERGY_FACTOR * v(cm/s)^2
+        return np.sqrt(energy / NEUTRON_MASS_ENERGY_FACTOR)

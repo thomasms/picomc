@@ -3,6 +3,7 @@ Main simulator orchestrator
 """
 
 import numpy as np
+from collections import deque
 from typing import List, Optional, Callable
 from picomc.particle import Particle, Event
 from picomc.geometry import Geometry, BoxGeometry, VoxelizedGeometry
@@ -35,7 +36,7 @@ class Simulator:
         self.transport = TransportEngine(geometry, self.physics)
         
         # Particle bank and statistics
-        self.particle_bank = []
+        self.particle_bank = deque()  # Use deque for O(1) popleft()
         self.stats = StatisticsCollector()
         
         # Tally (can be set later)
@@ -80,7 +81,8 @@ class Simulator:
                 direction,
                 energy,
                 weight=1.0,
-                time=0.0
+                time=0.0,
+                is_source=True  # Mark as source particle
             )
             particles.append(particle)
         return particles
@@ -90,21 +92,24 @@ class Simulator:
         Run the simulation
         
         Args:
-            num_particles: Number of particles to simulate (if None, use particle bank)
+            num_particles: Number of source particles to simulate (if None, process all in bank)
             verbose: Print progress information
         """
         # If num_particles specified, must have added source
         if num_particles is not None and len(self.particle_bank) == 0:
-            raise ValueError("No source particles defined. Use add_source_particles() first.")
+            raise ValueError(
+                "No source particles defined. Create source particles using "
+                "create_point_source() and add them with add_source_particles()."
+            )
         
         # Process particles from bank
         history_count = 0
         
         while self.particle_bank:
-            particle = self.particle_bank.pop(0)
+            particle = self.particle_bank.popleft()  # O(1) operation with deque
             
             # Increment history counter for source particles
-            if particle.time == 0.0:  # Source particle
+            if particle.is_source:
                 history_count += 1
                 if self.tally:
                     self.tally.increment_history()

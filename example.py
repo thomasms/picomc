@@ -29,7 +29,7 @@ def main():
     # - Water: ~0.1 atoms/barn-cm
     # - Uranium metal: ~0.048 atoms/barn-cm
     # In real use: data_manager.load_endf_file('path/to/endf', 'U235', number_density=0.048)
-    data_manager._add_default_material('default', number_density=0.05)
+    data_manager.add_material('default', number_density=0.05)
     
     # ============================================================
     # 2. Setup geometry

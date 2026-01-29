@@ -10,7 +10,8 @@ class Particle:
     """Represents a neutron particle in the simulation"""
     
     def __init__(self, position: np.ndarray, direction: np.ndarray, 
-                 energy: float, weight: float = 1.0, time: float = 0.0):
+                 energy: float, weight: float = 1.0, time: float = 0.0,
+                 is_source: bool = False):
         """
         Initialize a particle
         
@@ -20,6 +21,7 @@ class Particle:
             energy: Energy in eV
             weight: Statistical weight
             time: Time since start (s)
+            is_source: Whether this is a source particle (not a secondary)
         """
         self.position = np.array(position, dtype=float)
         self.direction = np.array(direction, dtype=float)
@@ -30,6 +32,7 @@ class Particle:
         self.energy = float(energy)
         self.weight = float(weight)
         self.time = float(time)
+        self.is_source = is_source
         self.alive = True
         
     def copy(self) -> 'Particle':
@@ -39,7 +42,8 @@ class Particle:
             self.direction.copy(),
             self.energy,
             self.weight,
-            self.time
+            self.time,
+            self.is_source
         )
         p.alive = self.alive
         return p
