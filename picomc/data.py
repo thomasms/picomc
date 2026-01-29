@@ -5,6 +5,10 @@ Nuclear data management using ENDF and PENDF files
 import numpy as np
 from typing import Dict, Optional, Tuple
 import warnings
+import logging
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 
 class CrossSectionData:
@@ -176,9 +180,9 @@ class NuclearDataManager:
                 'temperature': temperature
             }
             
-            print(f"Successfully loaded PENDF data for {material_name}")
-            print(f"  Energy range: {xs_data.energies[0]:.2e} to {xs_data.energies[-1]:.2e} eV")
-            print(f"  Number of energy points: {len(xs_data.energies)}")
+            logger.info(f"Successfully loaded PENDF data for {material_name}")
+            logger.info(f"  Energy range: {xs_data.energies[0]:.2e} to {xs_data.energies[-1]:.2e} eV")
+            logger.info(f"  Number of energy points: {len(xs_data.energies)}")
             
         except Exception as e:
             warnings.warn(f"Error loading PENDF file: {e}\nUsing default data")
@@ -198,13 +202,25 @@ class NuclearDataManager:
             file_format: Format ('auto', 'endf', 'pendf', 'ace')
             temperature: Temperature in Kelvin for PENDF files
         """
-        # Auto-detect format from file extension or content
+        import os
+        
+        # Auto-detect format from file extension
         if file_format == 'auto':
-            if 'pendf' in filepath.lower() or 'jeff' in filepath.lower():
+            ext = os.path.splitext(filepath)[1].lower()
+            basename = os.path.basename(filepath).lower()
+            
+            if ext == '.pendf' or 'pendf' in basename:
                 file_format = 'pendf'
-            elif '.ace' in filepath.lower():
+            elif ext in ['.ace', '.xsd', '.xsdir']:
                 file_format = 'ace'
+            elif ext in ['.endf', '.txt']:
+                # Check if it's JEFF library by path
+                if 'jeff' in filepath.lower() and 'pendf' in filepath.lower():
+                    file_format = 'pendf'
+                else:
+                    file_format = 'endf'
             else:
+                # Default to ENDF for unknown extensions
                 file_format = 'endf'
         
         if file_format == 'pendf':

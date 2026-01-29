@@ -11,6 +11,9 @@ from typing import Dict, List, Tuple, Optional
 import warnings
 import struct
 
+# Parser configuration
+MAX_TAB1_LOOKAHEAD_LINES = 100  # Maximum lines to search for TAB1 data
+
 
 class PENDFParser:
     """
@@ -101,7 +104,8 @@ class PENDFParser:
                         elif mt == 102:  # Capture
                             data['capture'] = xs
                         
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    # Ignore parsing errors for individual lines
                     pass
             
             i += 1
@@ -131,7 +135,7 @@ class PENDFParser:
         
         # Look for data pairs in the following lines
         i = start_idx + 1
-        max_lines = min(start_idx + 100, len(lines))  # Look ahead up to 100 lines
+        max_lines = min(start_idx + MAX_TAB1_LOOKAHEAD_LINES, len(lines))
         
         while i < max_lines:
             line = lines[i]
@@ -144,7 +148,7 @@ class PENDFParser:
                 # ENDF format: 6 fields of 11 characters each
                 for j in range(0, 66, 11):
                     val_str = line[j:j+11].strip()
-                    if val_str and val_str != '0':
+                    if val_str:  # Accept all values including zero
                         try:
                             val = float(val_str)
                             if len(energies) <= len(values):
@@ -153,7 +157,7 @@ class PENDFParser:
                                 values.append(val)
                         except ValueError:
                             pass
-            except:
+            except Exception:
                 pass
             
             i += 1

@@ -12,6 +12,10 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, Union
 from enum import Enum
 
+# Geometric tolerances
+SURFACE_TOLERANCE = 1e-10  # Tolerance for surface evaluation (cm)
+DISTANCE_TOLERANCE = 1e-10  # Minimum valid distance for intersections (cm)
+
 
 class SurfaceSense(Enum):
     """Sense of a surface (positive or negative side)"""
@@ -55,7 +59,7 @@ class Surface(ABC):
     def sense(self, position: np.ndarray) -> SurfaceSense:
         """Determine which side of surface the position is on"""
         val = self.evaluate(position)
-        if abs(val) < 1e-10:
+        if abs(val) < SURFACE_TOLERANCE:
             return SurfaceSense.ON
         return SurfaceSense.POSITIVE if val > 0 else SurfaceSense.NEGATIVE
 
@@ -70,10 +74,15 @@ class Plane(Surface):
         Args:
             surface_id: Unique ID
             A, B, C, D: Plane coefficients (Ax + By + Cz - D = 0)
+        
+        Raises:
+            ValueError: If normal vector (A, B, C) is zero
         """
         super().__init__(surface_id)
         # Normalize normal vector
         norm = np.sqrt(A**2 + B**2 + C**2)
+        if norm < SURFACE_TOLERANCE:
+            raise ValueError("Plane normal vector cannot be zero")
         self.A = A / norm
         self.B = B / norm
         self.C = C / norm
@@ -87,11 +96,11 @@ class Plane(Surface):
     def distance(self, position: np.ndarray, direction: np.ndarray) -> float:
         """Distance to plane"""
         denom = np.dot(direction, self.normal)
-        if abs(denom) < 1e-10:
+        if abs(denom) < SURFACE_TOLERANCE:
             return np.inf
         
         t = (self.D - np.dot(position, self.normal)) / denom
-        return t if t > 1e-10 else np.inf
+        return t if t > DISTANCE_TOLERANCE else np.inf
 
 
 class Sphere(Surface):
@@ -133,9 +142,9 @@ class Sphere(Surface):
         t2 = (-b + sqrt_disc) / (2*a)
         
         # Return smallest positive distance
-        if t1 > 1e-10:
+        if t1 > DISTANCE_TOLERANCE:
             return t1
-        elif t2 > 1e-10:
+        elif t2 > DISTANCE_TOLERANCE:
             return t2
         return np.inf
 
@@ -198,9 +207,9 @@ class Cylinder(Surface):
         t1 = (-b - sqrt_disc) / (2*a)
         t2 = (-b + sqrt_disc) / (2*a)
         
-        if t1 > 1e-10:
+        if t1 > DISTANCE_TOLERANCE:
             return t1
-        elif t2 > 1e-10:
+        elif t2 > DISTANCE_TOLERANCE:
             return t2
         return np.inf
 
@@ -226,10 +235,11 @@ class HalfSpace:
     def contains(self, position: np.ndarray) -> bool:
         """Check if position is in this half-space"""
         val = self.surface.evaluate(position)
+        # Use strict inequalities to avoid ambiguity at boundaries
         if self.sense > 0:
-            return val >= -1e-10
+            return val > -SURFACE_TOLERANCE
         else:
-            return val <= 1e-10
+            return val < SURFACE_TOLERANCE
 
 
 class CSGCell:
