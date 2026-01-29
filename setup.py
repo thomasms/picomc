@@ -27,5 +27,11 @@ setup(
     ],
     extras_require={
         "endf": ["endf-parserpy>=0.7.0"],
+        "dev": [
+            "pytest>=7.0.0",
+            "pytest-cov>=3.0.0",
+            "flake8>=5.0.0",
+            "black>=22.0.0",
+        ],
     },
 )

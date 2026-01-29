@@ -89,7 +89,7 @@ def test_box_standard_geometry():
     assert stats['absorbed'] > 0, "Some neutrons should be absorbed"
     
     print("\n✓ Standard box geometry test passed")
-    return True
+    pass
 
 
 def test_box_csg_geometry():
@@ -177,7 +177,7 @@ def test_box_csg_geometry():
     assert stats['total_neutrons'] >= num_particles, "Should track source particles"
     
     print("\n✓ CSG geometry test passed")
-    return True
+    pass
 
 
 def test_sphere_target_csg():
@@ -266,7 +266,7 @@ def test_sphere_target_csg():
     assert stats['total_neutrons'] >= num_particles
     
     print("\n✓ Spherical target test passed")
-    return True
+    pass
 
 
 if __name__ == '__main__':
