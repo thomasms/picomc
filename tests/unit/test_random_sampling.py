@@ -75,9 +75,7 @@ class TestInteractionTypeSampling:
 
     def test_mixed_cross_sections(self, random_seed):
         """Test with mixed cross sections"""
-        interactions = [
-            sample_interaction_type_from_xs(5.0, 3.0, 2.0, 10.0) for _ in range(100)
-        ]
+        interactions = [sample_interaction_type_from_xs(5.0, 3.0, 2.0, 10.0) for _ in range(100)]
 
         # All should be valid types
         assert all(i in ["elastic", "capture", "fission"] for i in interactions)

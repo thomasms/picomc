@@ -62,9 +62,7 @@ class TestParticle:
 
     def test_particle_default_values(self):
         """Test particle default parameter values"""
-        particle = Particle(
-            np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), 1.0e6
-        )
+        particle = Particle(np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]), 1.0e6)
 
         assert particle.weight == 1.0
         assert particle.time == 0.0
@@ -88,9 +86,7 @@ class TestEvent:
     @pytest.fixture
     def test_particle(self):
         """Create a test particle"""
-        return Particle(
-            np.array([1.0, 2.0, 3.0]), np.array([1.0, 0.0, 0.0]), 2.0e6
-        )
+        return Particle(np.array([1.0, 2.0, 3.0]), np.array([1.0, 0.0, 0.0]), 2.0e6)
 
     def test_event_initialization(self, test_particle):
         """Test event can be initialized"""
@@ -107,12 +103,8 @@ class TestEvent:
         """Test adding secondary particles"""
         event = Event(test_particle, "fission", test_particle.position.copy())
 
-        secondary1 = Particle(
-            np.array([1.0, 2.0, 3.0]), np.array([0.0, 1.0, 0.0]), 1.0e6
-        )
-        secondary2 = Particle(
-            np.array([1.0, 2.0, 3.0]), np.array([0.0, 0.0, 1.0]), 1.5e6
-        )
+        secondary1 = Particle(np.array([1.0, 2.0, 3.0]), np.array([0.0, 1.0, 0.0]), 1.0e6)
+        secondary2 = Particle(np.array([1.0, 2.0, 3.0]), np.array([0.0, 0.0, 1.0]), 1.5e6)
 
         event.add_secondary(secondary1)
         event.add_secondary(secondary2)

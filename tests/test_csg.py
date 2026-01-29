@@ -52,9 +52,7 @@ class TestSphere:
         # Test evaluation
         assert sphere.evaluate(np.array([15, 0, 0])) > 0, "Point outside sphere should be positive"
         assert sphere.evaluate(np.array([5, 0, 0])) < 0, "Point inside sphere should be negative"
-        assert (
-            abs(sphere.evaluate(np.array([10, 0, 0]))) < 1e-6
-        ), "Point on surface should be zero"
+        assert abs(sphere.evaluate(np.array([10, 0, 0]))) < 1e-6, "Point on surface should be zero"
 
     def test_sphere_distance_from_center(self):
         """Test distance from center to surface"""
