@@ -9,19 +9,23 @@ PicoMC supports multiple nuclear data formats:
 - **PENDF** (Pointwise ENDF) - Processed, linearized data (recommended)
 - **ACE** (A Compact ENDF) - Future support planned
 
+All parsing is done using the **endf-parserpy** library, which provides robust support for ENDF-6 format files.
+
 ## Installation
 
-First, install picomc with optional nuclear data support:
+PicoMC requires the `endf-parserpy` library for nuclear data support:
 
 ```bash
-pip install -e ".[endf]"
+pip install picomc
 ```
 
-This will install the `endf-parserpy` library for ENDF format support.
+This will automatically install `endf-parserpy` and other dependencies.
 
 ## Using PENDF Data (Recommended)
 
 PENDF files contain processed nuclear data with linearized cross sections, making them ideal for Monte Carlo simulations. They work with data from any library (JEFF, ENDF/B, JENDL, etc.).
+
+PicoMC uses **endf-parserpy** to parse PENDF files, providing robust and accurate parsing of the ENDF-6 format.
 
 ### JEFF 4.0 PENDF Library
 

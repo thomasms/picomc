@@ -1,23 +1,25 @@
 """
-PENDF (Pointwise ENDF) format parser
+PENDF (Pointwise ENDF) format parser using endf-parserpy
 
 PENDF is a processed nuclear data format with linearized, unionized cross sections.
 This module provides library-agnostic parsing for PENDF files from various sources
 like JEFF, ENDF/B, JENDL, etc.
+
+This implementation uses the endf-parserpy package for robust ENDF-6 format parsing.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Optional
 import warnings
-import struct
+import logging
 
-# Parser configuration
-MAX_TAB1_LOOKAHEAD_LINES = 100  # Maximum lines to search for TAB1 data
+# Setup logger
+logger = logging.getLogger(__name__)
 
 
 class PENDFParser:
     """
-    Parser for PENDF (Pointwise ENDF) format files
+    Parser for PENDF (Pointwise ENDF) format files using endf-parserpy
 
     PENDF files contain processed nuclear data with:
     - Linearized cross sections (no resonances to process)
@@ -25,152 +27,227 @@ class PENDFParser:
     - Temperature-dependent data
 
     This parser is library-agnostic and works with JEFF, ENDF/B, JENDL, etc.
+    It uses endf-parserpy for robust parsing of ENDF-6 format files.
     """
 
     def __init__(self):
         self.data = {}
+        self._check_endf_parserpy()
+
+    def _check_endf_parserpy(self):
+        """Check if endf-parserpy is available"""
+        try:
+            import endf_parserpy
+
+            self.endf_parserpy_available = True
+            logger.debug(f"endf-parserpy version {endf_parserpy.__version__} available")
+        except ImportError:
+            self.endf_parserpy_available = False
+            warnings.warn(
+                "endf-parserpy not available. Install with: pip install endf-parserpy\n"
+                "PENDF parsing will not work without it."
+            )
 
     def parse_file(self, filepath: str, temperature: float = 293.6) -> Dict:
         """
-        Parse a PENDF file
+        Parse a PENDF file using endf-parserpy
 
         Args:
             filepath: Path to PENDF file
             temperature: Temperature in Kelvin (default: 293.6K = 20.43°C)
+                        Note: This is informational; the file should already
+                        contain data for the desired temperature
 
         Returns:
-            Dictionary with parsed cross section data
+            Dictionary with parsed cross section data:
+            {
+                'energies': np.array,
+                'total': np.array,
+                'elastic': np.array,
+                'inelastic': np.array,
+                'capture': np.array,
+                'fission': np.array,
+                'nu': np.array
+            }
         """
+        if not self.endf_parserpy_available:
+            warnings.warn("endf-parserpy not available, returning empty data")
+            return self._create_empty_data()
+
         try:
-            # PENDF files can be ASCII or binary
-            # Try ASCII first (most common for JEFF 4.0)
-            return self._parse_ascii_pendf(filepath, temperature)
+            import endf_parserpy as endf
+
+            # Use EndfParserPy with PENDF recipe
+            parser = endf.EndfParserPy()
+
+            # Parse the file with PENDF flavor
+            # Include only MF=3 (cross sections) for efficiency
+            logger.info(f"Parsing PENDF file: {filepath}")
+            endf_dict = parser.parsefile(filepath, include=(3,))
+
+            # Extract cross section data
+            data = self._extract_cross_sections(endf_dict)
+
+            logger.info(
+                f"Successfully parsed PENDF file with {len(data['energies'])} energy points"
+            )
+            return data
+
         except Exception as e:
+            logger.error(f"Failed to parse PENDF file: {e}")
             warnings.warn(f"Failed to parse PENDF file: {e}")
-            return {}
+            return self._create_empty_data()
 
-    def _parse_ascii_pendf(self, filepath: str, temperature: float) -> Dict:
+    def _extract_cross_sections(self, endf_dict: Dict) -> Dict:
         """
-        Parse ASCII PENDF file
+        Extract cross section data from parsed ENDF dictionary
 
-        PENDF files use ENDF-6 format structure but with processed data
+        Args:
+            endf_dict: Parsed ENDF data from endf-parserpy
+
+        Returns:
+            Dictionary with cross section arrays
         """
         data = {
-            "energies": [],
-            "total": [],
-            "elastic": [],
-            "inelastic": [],
-            "capture": [],
-            "fission": [],
-            "nu": [],  # Neutrons per fission
+            "energies": np.array([]),
+            "total": np.array([]),
+            "elastic": np.array([]),
+            "inelastic": np.array([]),
+            "capture": np.array([]),
+            "fission": np.array([]),
+            "nu": np.array([]),
         }
 
-        with open(filepath, "r") as f:
-            lines = f.readlines()
+        # MF=3 contains cross section data
+        if 3 not in endf_dict:
+            logger.warning("No MF=3 (cross sections) found in PENDF file")
+            return data
 
-        # PENDF files use ENDF-6 format with TAB1/TAB2 records
-        # MF=3 contains cross sections
-        current_mf = 0
-        current_mt = 0
+        mf3 = endf_dict[3]
 
-        i = 0
-        while i < len(lines):
-            line = lines[i]
+        # Extract energy grid and cross sections for each MT
+        # MT numbers: 1=total, 2=elastic, 18=fission, 102=capture, etc.
 
-            # ENDF-6 format: columns 71-75 contain MF, 76-80 contain MT
-            if len(line) >= 80:
-                try:
-                    mf = int(line[70:72].strip())
-                    mt = int(line[72:75].strip())
+        # MT=1: Total cross section - use this for energy grid
+        if 1 in mf3:
+            mt1 = mf3[1]
+            data["energies"], data["total"] = self._extract_tab1_data(mt1)
+            logger.debug(
+                f"Extracted MT=1 (total): {len(data['energies'])} points"
+            )
 
-                    if mf == 3:  # Cross section data
-                        # Parse TAB1 record for this MT
-                        energies, xs = self._parse_tab1_record(lines, i)
+        # MT=2: Elastic scattering
+        if 2 in mf3:
+            mt2 = mf3[2]
+            _, data["elastic"] = self._extract_tab1_data(mt2)
+            logger.debug(f"Extracted MT=2 (elastic): {len(data['elastic'])} points")
 
-                        # Map MT numbers to reaction types
-                        if mt == 1:  # Total
-                            data["total"] = xs
-                            if len(data["energies"]) == 0:
-                                data["energies"] = energies
-                        elif mt == 2:  # Elastic
-                            data["elastic"] = xs
-                        elif mt >= 51 and mt <= 91:  # Inelastic
-                            if len(data["inelastic"]) == 0:
-                                data["inelastic"] = xs
-                            else:
-                                data["inelastic"] = [a + b for a, b in zip(data["inelastic"], xs)]
-                        elif mt == 18:  # Fission
-                            data["fission"] = xs
-                        elif mt == 102:  # Capture
-                            data["capture"] = xs
+        # MT=18: Fission
+        if 18 in mf3:
+            mt18 = mf3[18]
+            _, data["fission"] = self._extract_tab1_data(mt18)
+            logger.debug(f"Extracted MT=18 (fission): {len(data['fission'])} points")
 
-                except (ValueError, IndexError) as e:
-                    # Ignore parsing errors for individual lines
-                    pass
+        # MT=102: Radiative capture
+        if 102 in mf3:
+            mt102 = mf3[102]
+            _, data["capture"] = self._extract_tab1_data(mt102)
+            logger.debug(f"Extracted MT=102 (capture): {len(data['capture'])} points")
 
-            i += 1
+        # Inelastic scattering: MT=51-91
+        # Sum all inelastic contributions
+        inelastic_sum = None
+        for mt in range(51, 92):
+            if mt in mf3:
+                _, xs = self._extract_tab1_data(mf3[mt])
+                if inelastic_sum is None:
+                    inelastic_sum = xs
+                else:
+                    # Add if same length, otherwise skip
+                    if len(xs) == len(inelastic_sum):
+                        inelastic_sum = inelastic_sum + xs
 
-        # Convert to numpy arrays
-        for key in data:
-            if data[key]:
-                data[key] = np.array(data[key])
+        if inelastic_sum is not None:
+            data["inelastic"] = inelastic_sum
+            logger.debug(
+                f"Extracted inelastic (MT=51-91): {len(data['inelastic'])} points"
+            )
 
-        # If we didn't find energies, create empty arrays
-        if len(data["energies"]) == 0:
-            return self._create_empty_data()
+        # Ensure all arrays are the same length (use energy grid length)
+        n_points = len(data["energies"])
+        for key in ["total", "elastic", "capture", "fission", "inelastic"]:
+            if len(data[key]) == 0:
+                data[key] = np.zeros(n_points)
+            elif len(data[key]) != n_points:
+                logger.warning(
+                    f"{key} has {len(data[key])} points, expected {n_points}. Padding with zeros."
+                )
+                # Interpolate or pad to match energy grid
+                if len(data[key]) > 0:
+                    data[key] = np.interp(
+                        data["energies"],
+                        data["energies"][:len(data[key])],
+                        data[key],
+                        left=0.0,
+                        right=0.0,
+                    )
+                else:
+                    data[key] = np.zeros(n_points)
 
         return data
 
-    def _parse_tab1_record(
-        self, lines: List[str], start_idx: int
-    ) -> Tuple[List[float], List[float]]:
+    def _extract_tab1_data(self, mt_dict: Dict) -> tuple:
         """
-        Parse a TAB1 record from ENDF-6 format
+        Extract energy and cross section data from TAB1 record
 
-        TAB1 contains tabulated data (x, y pairs)
+        Args:
+            mt_dict: Dictionary for a specific MT section
+
+        Returns:
+            Tuple of (energies, cross_sections) as numpy arrays
         """
-        energies = []
-        values = []
+        try:
+            # TAB1 data structure in endf-parserpy
+            # Look for 'xstable' or 'sigma' keys (common in PENDF)
+            if "xstable" in mt_dict:
+                # Format: xstable contains x and y arrays
+                table = mt_dict["xstable"]
+                if isinstance(table, dict):
+                    x = np.array(table.get("x", []))
+                    y = np.array(table.get("y", []))
+                    return x, y
 
-        # This is a simplified parser - full ENDF-6 TAB1 parsing is complex
-        # For now, we'll extract what we can
+            # Alternative: look for 'energy' and 'xs' or 'sigma'
+            if "energy" in mt_dict and "xs" in mt_dict:
+                x = np.array(mt_dict["energy"])
+                y = np.array(mt_dict["xs"])
+                return x, y
 
-        # Look for data pairs in the following lines
-        i = start_idx + 1
-        max_lines = min(start_idx + MAX_TAB1_LOOKAHEAD_LINES, len(lines))
+            if "energy" in mt_dict and "sigma" in mt_dict:
+                x = np.array(mt_dict["energy"])
+                y = np.array(mt_dict["sigma"])
+                return x, y
 
-        while i < max_lines:
-            line = lines[i]
-            if len(line) < 66:
-                i += 1
-                continue
+            # Try to find arrays in the dictionary
+            # endf-parserpy typically stores data with specific keys
+            for key in mt_dict.keys():
+                if "table" in str(key).lower() or "data" in str(key).lower():
+                    table = mt_dict[key]
+                    if isinstance(table, dict):
+                        if "x" in table and "y" in table:
+                            x = np.array(table["x"])
+                            y = np.array(table["y"])
+                            return x, y
 
-            # Try to extract number pairs from the line
-            try:
-                # ENDF format: 6 fields of 11 characters each
-                for j in range(0, 66, 11):
-                    val_str = line[j : j + 11].strip()
-                    if val_str:  # Accept all values including zero
-                        try:
-                            val = float(val_str)
-                            if len(energies) <= len(values):
-                                energies.append(val)
-                            else:
-                                values.append(val)
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+            # If we reach here, we couldn't find the data
+            logger.warning(
+                f"Could not extract TAB1 data. Available keys: {list(mt_dict.keys())}"
+            )
+            return np.array([]), np.array([])
 
-            i += 1
-
-            # Stop if we have enough data or see a new section
-            if len(energies) > 10 and len(values) > 10:
-                break
-
-        # Make sure we have pairs
-        min_len = min(len(energies), len(values))
-        return energies[:min_len], values[:min_len]
+        except Exception as e:
+            logger.error(f"Error extracting TAB1 data: {e}")
+            return np.array([]), np.array([])
 
     def _create_empty_data(self) -> Dict:
         """Create empty data structure"""
@@ -184,28 +261,3 @@ class PENDFParser:
             "nu": np.array([]),
         }
 
-
-class ACEParser:
-    """
-    Parser for ACE (A Compact ENDF) format files
-
-    ACE is another common format, especially for MCNP.
-    This provides an alternative to PENDF.
-    """
-
-    def __init__(self):
-        self.data = {}
-
-    def parse_file(self, filepath: str) -> Dict:
-        """
-        Parse an ACE format file
-
-        Args:
-            filepath: Path to ACE file
-
-        Returns:
-            Dictionary with parsed cross section data
-        """
-        # ACE format parsing - placeholder for future implementation
-        warnings.warn("ACE format parsing not yet implemented")
-        return {}

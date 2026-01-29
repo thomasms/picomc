@@ -24,9 +24,9 @@ setup(
     install_requires=[
         "numpy>=1.20.0",
         "matplotlib>=3.3.0",
+        "endf-parserpy>=0.7.0",
     ],
     extras_require={
-        "endf": ["endf-parserpy>=0.7.0"],
         "dev": [
             "pytest>=7.0.0",
             "pytest-cov>=3.0.0",

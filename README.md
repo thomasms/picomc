@@ -20,12 +20,14 @@ A modular, pythonic Monte Carlo simulator for neutron transport with ENDF/PENDF 
 ## Installation
 
 ```bash
-# Basic installation
+# Basic installation (includes endf-parserpy for nuclear data parsing)
 pip install -e .
 
-# With ENDF support (optional)
-pip install -e ".[endf]"
+# With development tools
+pip install -e ".[dev]"
 ```
+
+**Note**: endf-parserpy is now a required dependency for robust PENDF/ENDF parsing.
 
 ## Quick Start
 
