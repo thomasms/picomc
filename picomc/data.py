@@ -1,5 +1,5 @@
 """
-Nuclear data management using ENDF files
+Nuclear data management using ENDF and PENDF files
 """
 
 import numpy as np
@@ -49,20 +49,24 @@ class CrossSectionData:
 
 class NuclearDataManager:
     """
-    Manager for nuclear data from ENDF files
+    Manager for nuclear data from ENDF and PENDF files
     
-    This class handles loading and accessing nuclear data from ENDF format files
-    using the endf-parserpy library.
+    This class handles loading and accessing nuclear data from:
+    - ENDF format files (using endf-parserpy library)
+    - PENDF format files (processed, linearized data) - library-agnostic
+    - ACE format files (future support)
     """
     
-    def __init__(self, use_endf: bool = False):
+    def __init__(self, use_endf: bool = False, data_format: str = 'auto'):
         """
         Initialize nuclear data manager
         
         Args:
             use_endf: Whether to use ENDF data (requires endf-parserpy)
+            data_format: Format of nuclear data files ('auto', 'endf', 'pendf', 'ace')
         """
         self.use_endf = use_endf
+        self.data_format = data_format
         self.materials = {}
         self.endf_parser_available = False
         
@@ -129,6 +133,89 @@ class NuclearDataManager:
             
         except Exception as e:
             warnings.warn(f"Error loading ENDF file: {e}\nUsing default data")
+            self.add_material(material_name, number_density)
+    
+    def load_pendf_file(self, filepath: str, material_name: str,
+                        number_density: float = 1.0, temperature: float = 293.6):
+        """
+        Load nuclear data from PENDF (Pointwise ENDF) file
+        
+        PENDF files contain processed nuclear data with linearized cross sections.
+        This is library-agnostic and works with JEFF, ENDF/B, JENDL, etc.
+        
+        Args:
+            filepath: Path to PENDF file
+            material_name: Name to assign to this material
+            number_density: Number density in atoms/barn-cm
+            temperature: Temperature in Kelvin (default: 293.6K)
+        """
+        try:
+            from picomc.pendf_parser import PENDFParser
+            
+            parser = PENDFParser()
+            pendf_data = parser.parse_file(filepath, temperature)
+            
+            if not pendf_data or len(pendf_data.get('energies', [])) == 0:
+                raise ValueError("No data extracted from PENDF file")
+            
+            xs_data = CrossSectionData()
+            xs_data.energies = pendf_data['energies']
+            xs_data.total = pendf_data.get('total', np.zeros_like(xs_data.energies))
+            xs_data.elastic = pendf_data.get('elastic', np.zeros_like(xs_data.energies))
+            xs_data.capture = pendf_data.get('capture', np.zeros_like(xs_data.energies))
+            xs_data.fission = pendf_data.get('fission', np.zeros_like(xs_data.energies))
+            
+            # If total is not available, compute it
+            if np.all(xs_data.total == 0):
+                xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
+            
+            self.materials[material_name] = {
+                'xs_data': xs_data,
+                'number_density': number_density,
+                'source_format': 'pendf',
+                'temperature': temperature
+            }
+            
+            print(f"Successfully loaded PENDF data for {material_name}")
+            print(f"  Energy range: {xs_data.energies[0]:.2e} to {xs_data.energies[-1]:.2e} eV")
+            print(f"  Number of energy points: {len(xs_data.energies)}")
+            
+        except Exception as e:
+            warnings.warn(f"Error loading PENDF file: {e}\nUsing default data")
+            self.add_material(material_name, number_density)
+    
+    def load_library_file(self, filepath: str, material_name: str,
+                         number_density: float = 1.0, 
+                         file_format: str = 'auto',
+                         temperature: float = 293.6):
+        """
+        Load nuclear data from any supported format (auto-detect or specify)
+        
+        Args:
+            filepath: Path to nuclear data file
+            material_name: Name to assign to this material
+            number_density: Number density in atoms/barn-cm
+            file_format: Format ('auto', 'endf', 'pendf', 'ace')
+            temperature: Temperature in Kelvin for PENDF files
+        """
+        # Auto-detect format from file extension or content
+        if file_format == 'auto':
+            if 'pendf' in filepath.lower() or 'jeff' in filepath.lower():
+                file_format = 'pendf'
+            elif '.ace' in filepath.lower():
+                file_format = 'ace'
+            else:
+                file_format = 'endf'
+        
+        if file_format == 'pendf':
+            self.load_pendf_file(filepath, material_name, number_density, temperature)
+        elif file_format == 'endf':
+            self.load_endf_file(filepath, material_name, number_density)
+        elif file_format == 'ace':
+            warnings.warn("ACE format not yet implemented, using default data")
+            self.add_material(material_name, number_density)
+        else:
+            warnings.warn(f"Unknown format {file_format}, using default data")
             self.add_material(material_name, number_density)
     
     def add_material(self, material_name: str, number_density: float = 1.0):

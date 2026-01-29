@@ -110,3 +110,35 @@ class VoxelizedGeometry(Geometry):
         iy = min(max(int(position[1] / self.voxel_size), 0), self.num_bins - 1)
         iz = min(max(int(position[2] / self.voxel_size), 0), self.num_bins - 1)
         return ix, iy, iz
+
+
+class CSGGeometryWrapper(Geometry):
+    """
+    Wrapper to use CSG geometry with the standard Geometry interface
+    
+    Allows CSG geometries (like Serpent/OpenMC) to be used in simulations
+    """
+    
+    def __init__(self, csg_geometry):
+        """
+        Initialize wrapper
+        
+        Args:
+            csg_geometry: CSGGeometry object from picomc.csg
+        """
+        from picomc.csg import CSGGeometry
+        if not isinstance(csg_geometry, CSGGeometry):
+            raise TypeError("csg_geometry must be a CSGGeometry object")
+        self.csg = csg_geometry
+    
+    def is_inside(self, position: np.ndarray) -> bool:
+        """Check if position is inside any cell"""
+        return self.csg.is_inside(position)
+    
+    def distance_to_boundary(self, position: np.ndarray, direction: np.ndarray) -> float:
+        """Calculate distance to geometry boundary"""
+        return self.csg.distance_to_boundary(position, direction)
+    
+    def get_material(self, position: np.ndarray) -> Optional[str]:
+        """Get material at position"""
+        return self.csg.get_material(position)
