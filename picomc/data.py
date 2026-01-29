@@ -181,10 +181,11 @@ class NuclearDataManager:
         micro_xs = self.get_material_xs(material, energy)
         number_density = self.materials[material]['number_density']
         
-        # Convert from barns to cm^2 (1 barn = 1e-24 cm^2)
-        # Macroscopic XS (cm^-1) = microscopic XS (barn) * N (atoms/barn-cm) * 1e-24
+        # Macroscopic XS (cm^-1) = microscopic XS (barn) * N (atoms/barn-cm)
+        # Since 1 barn = 1e-24 cm^2 and 1 atom/barn-cm = 1e24 atoms/cm^3,
+        # these factors cancel out
         macro_xs = {}
         for key, value in micro_xs.items():
-            macro_xs[key] = value * number_density * 1e-24
+            macro_xs[key] = value * number_density
             
         return macro_xs

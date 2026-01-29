@@ -1,0 +1,19 @@
+# Generated files
+flux_distribution.png
+*.pyc
+__pycache__/
+*.so
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
