@@ -1,0 +1,190 @@
+"""
+Nuclear data management using ENDF files
+"""
+
+import numpy as np
+from typing import Dict, Optional, Tuple
+import warnings
+
+
+class CrossSectionData:
+    """Container for cross section data"""
+    
+    def __init__(self):
+        self.energies = np.array([])
+        self.total = np.array([])
+        self.elastic = np.array([])
+        self.capture = np.array([])
+        self.fission = np.array([])
+        
+    def get_xs_at_energy(self, energy: float) -> Dict[str, float]:
+        """
+        Get cross sections at given energy using linear interpolation
+        
+        Args:
+            energy: Energy in eV
+            
+        Returns:
+            Dictionary with cross section values (barns)
+        """
+        if len(self.energies) == 0:
+            return {'total': 0.0, 'elastic': 0.0, 'capture': 0.0, 'fission': 0.0}
+        
+        # Linear interpolation in log-log space for better accuracy
+        xs = {}
+        if len(self.energies) > 1:
+            xs['total'] = np.interp(energy, self.energies, self.total)
+            xs['elastic'] = np.interp(energy, self.energies, self.elastic)
+            xs['capture'] = np.interp(energy, self.energies, self.capture)
+            xs['fission'] = np.interp(energy, self.energies, self.fission)
+        else:
+            xs['total'] = self.total[0] if len(self.total) > 0 else 0.0
+            xs['elastic'] = self.elastic[0] if len(self.elastic) > 0 else 0.0
+            xs['capture'] = self.capture[0] if len(self.capture) > 0 else 0.0
+            xs['fission'] = self.fission[0] if len(self.fission) > 0 else 0.0
+            
+        return xs
+
+
+class NuclearDataManager:
+    """
+    Manager for nuclear data from ENDF files
+    
+    This class handles loading and accessing nuclear data from ENDF format files
+    using the endf-parserpy library.
+    """
+    
+    def __init__(self, use_endf: bool = False):
+        """
+        Initialize nuclear data manager
+        
+        Args:
+            use_endf: Whether to use ENDF data (requires endf-parserpy)
+        """
+        self.use_endf = use_endf
+        self.materials = {}
+        self.endf_parser_available = False
+        
+        if use_endf:
+            try:
+                import endf_parserpy
+                self.endf_parser_available = True
+            except ImportError:
+                warnings.warn(
+                    "endf-parserpy not available. Install with: pip install endf-parserpy\n"
+                    "Falling back to simple cross section model."
+                )
+                self.use_endf = False
+                
+    def load_endf_file(self, filepath: str, material_name: str, 
+                       number_density: float = 1.0):
+        """
+        Load nuclear data from ENDF file
+        
+        Args:
+            filepath: Path to ENDF file
+            material_name: Name to assign to this material
+            number_density: Number density in atoms/barn-cm
+        """
+        if not self.use_endf or not self.endf_parser_available:
+            warnings.warn("ENDF parsing not available, using default data")
+            self._add_default_material(material_name, number_density)
+            return
+            
+        try:
+            from endf_parserpy import EndfParser
+            
+            parser = EndfParser()
+            endf_dict = parser.parsefile(filepath)
+            
+            xs_data = CrossSectionData()
+            
+            # Extract cross section data from ENDF
+            # MF=3 contains cross sections
+            if 3 in endf_dict.get('sections', {}):
+                mf3 = endf_dict['sections'][3]
+                
+                # MT=1 is total cross section
+                if 1 in mf3:
+                    xs_data.energies = np.array(mf3[1].get('energies', []))
+                    xs_data.total = np.array(mf3[1].get('xs', []))
+                
+                # MT=2 is elastic scattering
+                if 2 in mf3:
+                    xs_data.elastic = np.array(mf3[2].get('xs', []))
+                
+                # MT=18 is fission (if present)
+                if 18 in mf3:
+                    xs_data.fission = np.array(mf3[18].get('xs', []))
+                
+                # MT=102 is radiative capture
+                if 102 in mf3:
+                    xs_data.capture = np.array(mf3[102].get('xs', []))
+            
+            self.materials[material_name] = {
+                'xs_data': xs_data,
+                'number_density': number_density
+            }
+            
+        except Exception as e:
+            warnings.warn(f"Error loading ENDF file: {e}\nUsing default data")
+            self._add_default_material(material_name, number_density)
+    
+    def _add_default_material(self, material_name: str, number_density: float = 1.0):
+        """Add a material with default cross sections (for testing/demo)"""
+        xs_data = CrossSectionData()
+        
+        # Create simple energy grid (eV)
+        xs_data.energies = np.array([1e-5, 1e-2, 1.0, 100.0, 1e4, 1e6, 2e7])
+        
+        # Simplified cross sections (barns)
+        # These are rough approximations for demonstration
+        xs_data.elastic = np.array([10.0, 10.0, 8.0, 5.0, 3.0, 2.0, 1.5])
+        xs_data.capture = np.array([1000.0, 10.0, 3.0, 1.0, 0.5, 0.3, 0.2])
+        xs_data.fission = np.array([0.0, 0.0, 0.5, 1.0, 1.2, 1.0, 0.8])
+        xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
+        
+        self.materials[material_name] = {
+            'xs_data': xs_data,
+            'number_density': number_density
+        }
+    
+    def get_material_xs(self, material: str, energy: float) -> Dict[str, float]:
+        """
+        Get cross sections for a material at given energy
+        
+        Args:
+            material: Material name
+            energy: Energy in eV
+            
+        Returns:
+            Dictionary with microscopic cross sections (barns)
+        """
+        if material not in self.materials:
+            warnings.warn(f"Material {material} not found, adding default")
+            self._add_default_material(material)
+        
+        xs_data = self.materials[material]['xs_data']
+        return xs_data.get_xs_at_energy(energy)
+    
+    def get_macroscopic_xs(self, material: str, energy: float) -> Dict[str, float]:
+        """
+        Get macroscopic cross sections for a material at given energy
+        
+        Args:
+            material: Material name
+            energy: Energy in eV
+            
+        Returns:
+            Dictionary with macroscopic cross sections (cm^-1)
+        """
+        micro_xs = self.get_material_xs(material, energy)
+        number_density = self.materials[material]['number_density']
+        
+        # Convert from barns to cm^2 (1 barn = 1e-24 cm^2)
+        # Macroscopic XS (cm^-1) = microscopic XS (barn) * N (atoms/barn-cm) * 1e-24
+        macro_xs = {}
+        for key, value in micro_xs.items():
+            macro_xs[key] = value * number_density * 1e-24
+            
+        return macro_xs
