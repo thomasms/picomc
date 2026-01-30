@@ -3,7 +3,6 @@ Physics interactions for neutron transport
 """
 
 import numpy as np
-from typing import Dict, Optional, List
 from picomc.particle import Particle, Event
 from picomc.data import NuclearDataManager
 

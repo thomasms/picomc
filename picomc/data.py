@@ -3,7 +3,7 @@ Nuclear data management using ENDF and PENDF files
 """
 
 import numpy as np
-from typing import Dict, Optional, Tuple
+from typing import Dict
 import warnings
 import logging
 
@@ -175,7 +175,7 @@ class NuclearDataManager:
 
         if use_endf:
             try:
-                import endf_parserpy
+                import endf_parserpy  # noqa: F401
 
                 self.endf_parser_available = True
             except ImportError:

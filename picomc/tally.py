@@ -5,7 +5,6 @@ Tally and scoring classes
 import numpy as np
 from typing import Optional
 from picomc.geometry import VoxelizedGeometry
-from picomc.particle import Particle
 
 
 class FluxTally:
@@ -137,6 +136,6 @@ class StatisticsCollector:
         """Print summary statistics"""
         summary = self.get_summary()
         print(f"Total neutrons tracked: {summary['total_neutrons']}")
-        print(f"Absorbed: {summary['absorbed']} ({summary['absorption_fraction']*100:.2f}%)")
-        print(f"Escaped: {summary['escaped']} ({summary['escape_fraction']*100:.2f}%)")
+        print(f"Absorbed: {summary['absorbed']} ({summary['absorption_fraction'] * 100:.2f}%)")
+        print(f"Escaped: {summary['escaped']} ({summary['escape_fraction'] * 100:.2f}%)")
         print(f"Fission events: {summary['fission_events']}")

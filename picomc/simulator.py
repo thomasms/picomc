@@ -4,9 +4,9 @@ Main simulator orchestrator
 
 import numpy as np
 from collections import deque
-from typing import List, Optional, Callable
-from picomc.particle import Particle, Event
-from picomc.geometry import Geometry, BoxGeometry, VoxelizedGeometry
+from typing import List, Optional
+from picomc.particle import Particle
+from picomc.geometry import Geometry
 from picomc.physics import PhysicsEngine
 from picomc.transport import TransportEngine
 from picomc.tally import FluxTally, StatisticsCollector
@@ -149,7 +149,7 @@ class Simulator:
                 break
 
         if verbose:
-            print(f"\nSimulation complete!")
+            print("\nSimulation complete!")
             self.stats.print_summary()
 
     def get_results(self) -> dict:

@@ -9,7 +9,7 @@ Implements CSG geometry similar to Serpent and OpenMC codes:
 
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple
 from enum import Enum
 
 # Geometric tolerances

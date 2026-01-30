@@ -150,9 +150,7 @@ class TestNuclearDataManagerFission:
 
     def test_sample_fission_energy_distribution(self, data_manager):
         """Test fission energy distribution shape"""
-        energies = [
-            data_manager.sample_fission_energy("test_fuel", 2e6) for _ in range(1000)
-        ]
+        energies = [data_manager.sample_fission_energy("test_fuel", 2e6) for _ in range(1000)]
 
         # Check distribution properties
         mean_energy = np.mean(energies)

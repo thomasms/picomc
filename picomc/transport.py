@@ -2,8 +2,7 @@
 Transport logic for particle tracking
 """
 
-import numpy as np
-from typing import List, Optional, Callable
+from typing import List, Optional
 from picomc.particle import Particle, Event
 from picomc.geometry import Geometry
 from picomc.physics import PhysicsEngine

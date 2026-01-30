@@ -5,7 +5,6 @@ These functions are extracted to be easily testable and mockable.
 """
 
 import numpy as np
-from typing import Tuple
 
 
 def sample_exponential_distance(sigma_total: float) -> float:
