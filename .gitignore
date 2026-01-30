@@ -1,0 +1,25 @@
+# Generated files
+flux_distribution.png
+*.pyc
+__pycache__/
+*.so
+*.egg-info/
+dist/
+build/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
