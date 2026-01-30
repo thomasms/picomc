@@ -131,8 +131,9 @@ class TestNuclearDataManager:
         """Test that requesting unknown material creates it with defaults"""
         dm = NuclearDataManager()
 
-        # This should create the material automatically
-        xs = dm.get_material_xs("unknown_material", 2.0e6)
+        # This should create the material automatically with a warning
+        with pytest.warns(UserWarning, match="Material unknown_material not found"):
+            xs = dm.get_material_xs("unknown_material", 2.0e6)
 
         assert "unknown_material" in dm.materials
         assert all(v >= 0 for v in xs.values())
