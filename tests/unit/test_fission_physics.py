@@ -215,6 +215,10 @@ class TestFissionPhysicsIntegration:
 
         engine, dm = setup
 
+        # Set random seed for reproducible results
+        # Without this, Poisson sampling can occasionally return 0
+        np.random.seed(42)
+
         # Create test particle
         particle = Particle(
             position=np.array([0.0, 0.0, 0.0]),
