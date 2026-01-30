@@ -510,3 +510,141 @@ class NuclearDataManager:
             return np.random.exponential(1.0e6) + 0.5e6
 
         return fission_spectrum.sample_energy(incident_energy)
+
+    def load_library_directory(
+        self, directory: str, isotopes: list = None, temperature: float = 293.6
+    ):
+        """
+        Load multiple PENDF files from a directory
+
+        Args:
+            directory: Path to directory containing PENDF files
+            isotopes: List of isotope names to load (e.g., ['U235', 'Pu239']).
+                     If None, loads all files in directory.
+            temperature: Temperature in Kelvin (default: 293.6K)
+
+        Returns:
+            Dictionary mapping isotope names to material names in the manager
+        """
+        from pathlib import Path
+        import re
+
+        data_dir = Path(directory)
+        if not data_dir.exists():
+            raise ValueError(f"Directory not found: {directory}")
+
+        # Get list of PENDF files
+        pendf_files = list(data_dir.glob("*.pendf"))
+
+        if not pendf_files:
+            logger.warning(f"No PENDF files found in {directory}")
+            return {}
+
+        loaded_materials = {}
+
+        for pendf_file in pendf_files:
+            # Parse filename to extract isotope info
+            # Format: n-ZZZ_SYMBOL_AAA.pendf
+            match = re.match(r"n-(\d+)_([A-Za-z]+)_(\d+)\.pendf", pendf_file.name)
+            if not match:
+                logger.warning(f"Could not parse filename: {pendf_file.name}")
+                continue
+
+            z_str, symbol, a_str = match.groups()
+            isotope_name = f"{symbol}{a_str}"
+
+            # Skip if not in requested list
+            if isotopes is not None and isotope_name not in isotopes:
+                continue
+
+            # Load the file
+            try:
+                logger.info(f"Loading {isotope_name} from {pendf_file.name}...")
+
+                # Default number density (can be changed later)
+                number_density = 0.05  # atoms/barn-cm
+
+                self.load_pendf_file(str(pendf_file), isotope_name, number_density, temperature)
+                loaded_materials[isotope_name] = isotope_name
+
+                logger.info(f"  ✓ Loaded {isotope_name}")
+
+            except Exception as e:
+                logger.error(f"  ✗ Failed to load {isotope_name}: {e}")
+
+        logger.info(f"\nLoaded {len(loaded_materials)} isotopes from {directory}")
+        return loaded_materials
+
+    def load_jeff40_library(self, isotopes: list = None, temperature: float = 293.6):
+        """
+        Load JEFF 4.0 library from default location
+
+        Looks for JEFF 4.0 files in ~/.picomc/data/jeff40/
+
+        Args:
+            isotopes: List of isotope names to load (e.g., ['U235', 'Pu239']).
+                     If None, loads all available files.
+            temperature: Temperature in Kelvin (default: 293.6K)
+
+        Returns:
+            Dictionary mapping isotope names to material names
+
+        Example:
+            >>> dm = NuclearDataManager()
+            >>> materials = dm.load_jeff40_library(['U235', 'Pu239', 'H1'])
+            >>> print(f"Loaded: {list(materials.keys())}")
+        """
+        from pathlib import Path
+
+        # Default JEFF 4.0 location
+        jeff40_dir = Path.home() / ".picomc" / "data" / "jeff40"
+
+        if not jeff40_dir.exists():
+            raise FileNotFoundError(
+                f"JEFF 4.0 directory not found: {jeff40_dir}\n"
+                f"Please download JEFF 4.0 files and place them in this directory.\n"
+                f"Use: python bootstrap_jeff.py --help for instructions."
+            )
+
+        return self.load_library_directory(str(jeff40_dir), isotopes, temperature)
+
+    def list_loaded_materials(self):
+        """
+        List all materials currently loaded in the manager
+
+        Returns:
+            List of material names
+        """
+        return list(self.materials.keys())
+
+    def get_material_info(self, material: str) -> dict:
+        """
+        Get information about a loaded material
+
+        Args:
+            material: Material name
+
+        Returns:
+            Dictionary with material information
+        """
+        if material not in self.materials:
+            raise ValueError(f"Material not found: {material}")
+
+        mat = self.materials[material]
+        xs_data = mat["xs_data"]
+
+        info = {
+            "name": material,
+            "number_density": mat["number_density"],
+            "energy_range": (
+                (float(xs_data.energies[0]), float(xs_data.energies[-1]))
+                if len(xs_data.energies) > 0
+                else (0.0, 0.0)
+            ),
+            "num_energy_points": len(xs_data.energies),
+            "has_fission": len(xs_data.fission) > 0 and np.max(xs_data.fission) > 0,
+            "has_nubar": mat.get("nubar_data") is not None,
+            "has_fission_spectrum": mat.get("fission_spectrum") is not None,
+        }
+
+        return info
