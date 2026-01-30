@@ -83,6 +83,10 @@ class TestFissionSpectrumData:
 
     def test_tabulated_spectrum_sampling(self):
         """Test tabulated spectrum sampling"""
+        # Set random seed for reproducible results
+        # Without this, statistical variance in sampling can cause test to fail
+        np.random.seed(42)
+
         spectrum = FissionSpectrumData()
         spectrum.spectrum_type = "tabulated"
 
