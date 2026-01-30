@@ -21,6 +21,32 @@ pip install picomc
 
 This will automatically install `endf-parserpy` and other dependencies.
 
+## Nuclear Data Components
+
+PicoMC extracts and uses the following nuclear data from ENDF/PENDF files:
+
+### Cross Sections (MF=3)
+- **MT=1**: Total cross section
+- **MT=2**: Elastic scattering
+- **MT=18**: Fission
+- **MT=102**: Radiative capture
+- **MT=51-91**: Inelastic scattering levels (summed)
+
+### Fission Neutron Multiplicity - Nubar (MF=1)
+- **MT=452**: Total nubar (prompt + delayed)
+- **MT=455**: Delayed nubar
+- **MT=456**: Prompt nubar
+
+Energy-dependent nubar data is used to sample the number of neutrons produced per fission event using a Poisson distribution.
+
+### Fission Neutron Energy Spectrum (MF=5, MT=18)
+- **Watt Spectrum** (LF=11): chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+  - Parameters a and b are extracted from ENDF data
+  - Default U-235: a = 0.988 MeV, b = 2.249 MeV⁻¹
+- **Tabulated Spectrum** (LF=1): Chi(E) as tabulated function
+
+The fission spectrum determines the energy distribution of neutrons born in fission events.
+
 ## Using PENDF Data (Recommended)
 
 PENDF files contain processed nuclear data with linearized cross sections, making them ideal for Monte Carlo simulations. They work with data from any library (JEFF, ENDF/B, JENDL, etc.).
@@ -33,6 +59,7 @@ The JEFF 4.0 PENDF library is available from OECD-NEA:
 - URL: https://data.oecd-nea.org/records/wgw94-qcx30
 - Contains processed data for all isotopes at multiple temperatures
 - Linearized cross sections ready for direct use
+- Includes fission data (nubar and spectrum) where applicable
 
 ```python
 from picomc import Simulator, BoxGeometry, NuclearDataManager
@@ -412,3 +439,199 @@ python tests/test_csg.py
 # Test neutron transport with various geometries
 python tests/test_neutron_box.py
 ```
+
+## Fission Physics with Real ENDF Data
+
+PicoMC uses real nuclear data from ENDF/PENDF files for accurate fission physics simulations.
+
+### What Data is Used
+
+1. **Nubar (ν)** - Average neutrons per fission
+   - Source: ENDF MF=1, MT=452 (total), MT=455 (delayed), MT=456 (prompt)
+   - Energy-dependent: ν = f(E_incident)
+   - Sampled using Poisson distribution
+
+2. **Fission Spectrum** - Energy distribution of fission neutrons
+   - Source: ENDF MF=5, MT=18
+   - **Watt Spectrum** (most common): chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+   - **Tabulated**: Chi(E) from tabulated data
+   - Default U-235: a = 0.988 MeV, b = 2.249 MeV⁻¹
+
+### Example: Fission Chain Reaction
+
+```python
+from picomc import Simulator, BoxGeometry, NuclearDataManager
+import numpy as np
+
+# Create data manager and load U-235 data with fission info
+data_manager = NuclearDataManager()
+data_manager.load_pendf_file(
+    'path/to/jeff40/pendf/n-092_U_235.pendf',
+    'U235_fuel',
+    number_density=0.048,  # atoms/barn-cm
+    temperature=293.6
+)
+
+# Check what fission data was loaded
+material = data_manager.materials['U235_fuel']
+if 'nubar_data' in material:
+    nubar_data = material['nubar_data']
+    print(f"Nubar data loaded: {len(nubar_data.energies)} energy points")
+    print(f"Nubar range: {nubar_data.total[0]:.3f} to {nubar_data.total[-1]:.3f}")
+
+if 'fission_spectrum' in material:
+    spec = material['fission_spectrum']
+    print(f"Fission spectrum type: {spec.spectrum_type}")
+    if spec.spectrum_type == 'watt':
+        print(f"  Watt parameters: a={spec.params['a']/1e6:.3f} MeV, b={spec.params['b']*1e6:.3f} MeV^-1")
+
+# Create geometry and simulator
+geometry = BoxGeometry(size=50.0, material='U235_fuel')
+sim = Simulator(geometry, data_manager, enable_fission=True)
+
+# Create neutron source at center
+source_pos = np.array([25.0, 25.0, 25.0])
+particles = sim.create_point_source(source_pos, n_particles=100, energy=2.0e6)
+sim.add_source_particles(particles)
+
+# Run simulation
+sim.run()
+results = sim.get_results()
+
+# Analyze fission statistics
+print(f"\nResults:")
+print(f"Total particles tracked: {results['statistics']['total_neutrons']}")
+print(f"Fission events: {results['statistics']['fissions']}")
+print(f"Absorbed: {results['statistics']['absorbed']}")
+print(f"Escaped: {results['statistics']['escaped']}")
+```
+
+### Accessing Nubar and Fission Spectrum Directly
+
+```python
+# Get nubar at different energies
+thermal_energy = 0.0253  # eV (thermal)
+fast_energy = 2.0e6      # eV (2 MeV)
+
+nubar_thermal = data_manager.get_nubar('U235_fuel', thermal_energy)
+nubar_fast = data_manager.get_nubar('U235_fuel', fast_energy)
+
+print(f"Nubar at thermal energy: {nubar_thermal:.3f}")
+print(f"Nubar at 2 MeV: {nubar_fast:.3f}")
+
+# Sample fission neutron energies
+fission_energies = [
+    data_manager.sample_fission_energy('U235_fuel', 2.0e6)
+    for _ in range(1000)
+]
+
+import matplotlib.pyplot as plt
+plt.hist(fission_energies, bins=50, density=True)
+plt.xlabel('Energy (eV)')
+plt.ylabel('Probability Density')
+plt.title('Fission Neutron Energy Spectrum')
+plt.xscale('log')
+plt.show()
+```
+
+### Energy-Dependent Nubar Example
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Get nubar as function of energy
+energies = np.logspace(0, 7, 100)  # 1 eV to 10 MeV
+nubars = [data_manager.get_nubar('U235_fuel', E) for E in energies]
+
+plt.figure(figsize=(10, 6))
+plt.semilogx(energies, nubars, linewidth=2)
+plt.xlabel('Incident Neutron Energy (eV)')
+plt.ylabel('Average Neutrons per Fission (ν)')
+plt.title('Energy-Dependent Nubar for U-235')
+plt.grid(True, which='both', alpha=0.3)
+plt.axhline(y=2.5, color='r', linestyle='--', label='Typical thermal value')
+plt.legend()
+plt.show()
+```
+
+### Comparing Fission Spectra
+
+```python
+# Compare different materials or temperatures
+materials = {
+    'U235': 'path/to/U235.pendf',
+    'Pu239': 'path/to/Pu239.pendf',
+}
+
+for name, filepath in materials.items():
+    data_manager.load_pendf_file(filepath, name, 0.048)
+    
+    # Sample energies
+    energies = [
+        data_manager.sample_fission_energy(name, 2.0e6)
+        for _ in range(5000)
+    ]
+    
+    plt.hist(energies, bins=100, alpha=0.5, label=name, density=True)
+
+plt.xlabel('Fission Neutron Energy (eV)')
+plt.ylabel('Probability Density')
+plt.title('Comparison of Fission Spectra')
+plt.xscale('log')
+plt.legend()
+plt.show()
+```
+
+### Physics Improvements Over Simple Model
+
+The real ENDF data provides several improvements:
+
+1. **Energy-dependent nubar**: 
+   - Thermal neutrons (0.025 eV): ν ≈ 2.43
+   - Fast neutrons (2 MeV): ν ≈ 2.50
+   - High energy (14 MeV): ν ≈ 2.8
+
+2. **Accurate fission spectrum**:
+   - Peak around 0.7 - 1.0 MeV (not at 2 MeV)
+   - Proper high-energy tail
+   - Material-specific differences
+
+3. **Statistical fluctuations**:
+   - Poisson distribution for number of neutrons
+   - Proper sampling from Watt or tabulated spectrum
+
+### Validation
+
+Compare your results with published benchmarks:
+
+```python
+# ICSBEP benchmarks or MCNP/Serpent calculations
+# Example: k-effective for critical assemblies
+
+# Run simulation
+sim.run()
+results = sim.get_results()
+
+# Calculate multiplication factor
+k_eff = results['statistics']['fissions'] * mean_nubar / initial_neutrons
+
+print(f"k-effective: {k_eff:.4f}")
+```
+
+### Notes on Data Quality
+
+- **PENDF files** contain linearized data - best for Monte Carlo
+- **Temperature effects** are important for thermal reactors
+- **Delayed neutrons** (from nubar_delayed) can be important for time-dependent problems
+- **Prompt neutrons** (from nubar_prompt) dominate in most fast systems
+
+### Fallback Behavior
+
+If ENDF/PENDF data is not available or parsing fails:
+
+- Nubar: Uses default value of 2.5 (typical for U-235)
+- Fission spectrum: Uses Watt spectrum with U-235 parameters
+- Warning is issued to alert user
+
+This ensures simulations can run for testing even without data files.
