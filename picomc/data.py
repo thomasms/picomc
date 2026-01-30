@@ -51,6 +51,105 @@ class CrossSectionData:
         return xs
 
 
+class NubarData:
+    """Container for nubar (neutrons per fission) data"""
+
+    def __init__(self):
+        self.energies = np.array([])
+        self.total = np.array([])  # Total nubar (prompt + delayed)
+        self.prompt = np.array([])  # Prompt nubar
+        self.delayed = np.array([])  # Delayed nubar
+
+    def get_nubar_at_energy(self, energy: float) -> float:
+        """
+        Get nubar at given energy using linear interpolation
+
+        Args:
+            energy: Incident neutron energy in eV
+
+        Returns:
+            Average number of neutrons per fission
+        """
+        if len(self.energies) == 0 or len(self.total) == 0:
+            # Default for U-235
+            return 2.5
+
+        if len(self.energies) == 1:
+            return float(self.total[0])
+
+        # Linear interpolation in energy
+        return float(np.interp(energy, self.energies, self.total))
+
+
+class FissionSpectrumData:
+    """Container for fission neutron energy spectrum"""
+
+    def __init__(self):
+        self.spectrum_type = "none"  # 'watt', 'tabulated', 'none'
+        self.params = {}
+
+    def sample_energy(self, incident_energy: float = None) -> float:
+        """
+        Sample fission neutron energy from spectrum
+
+        Args:
+            incident_energy: Incident neutron energy in eV (may affect spectrum)
+
+        Returns:
+            Fission neutron energy in eV
+        """
+        if self.spectrum_type == "watt":
+            # Watt spectrum: chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+            # Default parameters for U-235 thermal fission
+            a = self.params.get("a", 0.988e6)  # eV
+            b = self.params.get("b", 2.249e-6)  # 1/eV
+
+            # Sample using rejection method
+            # Maximum of Watt spectrum is around E ~ 0.7 MeV
+            # Use simplified sampling: sample from maxwellian + rejection
+            max_attempts = 1000
+            for _ in range(max_attempts):
+                # Sample from exponential distribution as proposal
+                E = np.random.exponential(a)
+
+                # Compute Watt probability (unnormalized)
+                if E > 0 and b * E < 100:  # Avoid overflow
+                    prob = np.exp(-E / a) * np.sinh(np.sqrt(b * E))
+
+                    # Rejection sampling
+                    # Max value of sinh(sqrt(b*E))/exp(-E/a) is around 1.5 for typical values
+                    u = np.random.random()
+                    max_val = 1.5
+                    if u < prob / (max_val * np.exp(-E / a)):
+                        return E
+
+            # Fallback if rejection fails
+            return np.random.exponential(a)
+
+        elif self.spectrum_type == "tabulated":
+            # Sample from tabulated distribution
+            energies = self.params.get("energies", np.array([]))
+            chi = self.params.get("chi", np.array([]))
+
+            if len(energies) > 0 and len(chi) > 0:
+                # Normalize chi
+                chi_norm = chi / np.sum(chi)
+
+                # Sample from discrete distribution
+                idx = np.random.choice(len(energies), p=chi_norm)
+
+                # Add some randomization within the bin
+                if idx < len(energies) - 1:
+                    E_low = energies[idx]
+                    E_high = energies[idx + 1]
+                    return E_low + np.random.random() * (E_high - E_low)
+                else:
+                    return energies[idx]
+
+        # Default: use simplified exponential (backward compatibility)
+        return np.random.exponential(1.0e6) + 0.5e6
+
+
 class NuclearDataManager:
     """
     Manager for nuclear data from ENDF and PENDF files
@@ -175,8 +274,22 @@ class NuclearDataManager:
             if np.all(xs_data.total == 0):
                 xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
 
+            # Extract nubar data
+            nubar_data = NubarData()
+            nubar_data.energies = pendf_data.get("nubar_energies", np.array([]))
+            nubar_data.total = pendf_data.get("nubar_total", np.array([]))
+            nubar_data.prompt = pendf_data.get("nubar_prompt", np.array([]))
+            nubar_data.delayed = pendf_data.get("nubar_delayed", np.array([]))
+
+            # Extract fission spectrum data
+            fission_spectrum = FissionSpectrumData()
+            fission_spectrum.spectrum_type = pendf_data.get("fission_spectrum_type", "none")
+            fission_spectrum.params = pendf_data.get("fission_spectrum_params", {})
+
             self.materials[material_name] = {
                 "xs_data": xs_data,
+                "nubar_data": nubar_data,
+                "fission_spectrum": fission_spectrum,
                 "number_density": number_density,
                 "source_format": "pendf",
                 "temperature": temperature,
@@ -187,6 +300,19 @@ class NuclearDataManager:
                 f"  Energy range: {xs_data.energies[0]:.2e} to {xs_data.energies[-1]:.2e} eV"
             )
             logger.info(f"  Number of energy points: {len(xs_data.energies)}")
+
+            if len(nubar_data.energies) > 0:
+                logger.info(f"  Nubar data: {len(nubar_data.energies)} points")
+                logger.info(
+                    f"    Nubar range: {nubar_data.total[0]:.3f} to {nubar_data.total[-1]:.3f}"
+                )
+            else:
+                logger.info("  No nubar data found (will use default)")
+
+            if fission_spectrum.spectrum_type != "none":
+                logger.info(f"  Fission spectrum: {fission_spectrum.spectrum_type}")
+            else:
+                logger.info("  No fission spectrum data (will use default)")
 
         except Exception as e:
             warnings.warn(f"Error loading PENDF file: {e}\nUsing default data")
@@ -262,7 +388,25 @@ class NuclearDataManager:
         xs_data.fission = np.array([0.0, 0.0, 0.5, 1.0, 1.2, 1.0, 0.8])
         xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
 
-        self.materials[material_name] = {"xs_data": xs_data, "number_density": number_density}
+        # Default nubar data (U-235-like)
+        nubar_data = NubarData()
+        nubar_data.energies = np.array([1e-5, 1e6, 2e7])
+        nubar_data.total = np.array([2.43, 2.5, 2.8])
+
+        # Default fission spectrum (Watt parameters for U-235)
+        fission_spectrum = FissionSpectrumData()
+        fission_spectrum.spectrum_type = "watt"
+        fission_spectrum.params = {
+            "a": 0.988e6,  # eV
+            "b": 2.249e-6,  # 1/eV
+        }
+
+        self.materials[material_name] = {
+            "xs_data": xs_data,
+            "nubar_data": nubar_data,
+            "fission_spectrum": fission_spectrum,
+            "number_density": number_density,
+        }
 
     # Keep old name for backwards compatibility
     def _add_default_material(self, material_name: str, number_density: float = 1.0):
@@ -309,3 +453,49 @@ class NuclearDataManager:
             macro_xs[key] = value * number_density
 
         return macro_xs
+
+    def get_nubar(self, material: str, energy: float) -> float:
+        """
+        Get nubar (average neutrons per fission) for a material at given energy
+
+        Args:
+            material: Material name
+            energy: Incident neutron energy in eV
+
+        Returns:
+            Average number of neutrons per fission
+        """
+        if material not in self.materials:
+            logger.warning(f"Material {material} not found, using default nubar")
+            return 2.5
+
+        nubar_data = self.materials[material].get("nubar_data")
+        if nubar_data is None:
+            # Default nubar if not available
+            logger.debug(f"No nubar data for {material}, using default")
+            return 2.5
+
+        return nubar_data.get_nubar_at_energy(energy)
+
+    def sample_fission_energy(self, material: str, incident_energy: float) -> float:
+        """
+        Sample fission neutron energy for a material
+
+        Args:
+            material: Material name
+            incident_energy: Incident neutron energy in eV
+
+        Returns:
+            Fission neutron energy in eV
+        """
+        if material not in self.materials:
+            logger.warning(f"Material {material} not found, using default fission spectrum")
+            return np.random.exponential(1.0e6) + 0.5e6
+
+        fission_spectrum = self.materials[material].get("fission_spectrum")
+        if fission_spectrum is None:
+            # Default spectrum if not available
+            logger.debug(f"No fission spectrum for {material}, using default")
+            return np.random.exponential(1.0e6) + 0.5e6
+
+        return fission_spectrum.sample_energy(incident_energy)

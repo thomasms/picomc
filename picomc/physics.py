@@ -9,9 +9,6 @@ from picomc.data import NuclearDataManager
 
 # Physical constants
 NEUTRON_MASS_ENERGY_FACTOR = 5.227e-9  # E(eV) = NEUTRON_MASS_ENERGY_FACTOR * v(cm/s)^2
-DEFAULT_NU = 2.5  # Average neutrons per fission for U-235
-FISSION_ENERGY_SCALE = 1.0e6  # eV, exponential scale for fission spectrum
-FISSION_ENERGY_MIN = 0.5e6  # eV, minimum fission neutron energy
 
 
 class PhysicsEngine:
@@ -113,13 +110,13 @@ class PhysicsEngine:
         else:  # fission
             # Fission - particle dies, create secondaries
             particle.alive = False
-            num_neutrons = self.sample_fission_neutrons()
+            num_neutrons = self.sample_fission_neutrons(particle.energy, material)
 
             for _ in range(num_neutrons):
                 # Create fission neutrons
                 direction = self.sample_isotropic_direction()
-                # Fission neutrons typically born around 2 MeV
-                energy = self.sample_fission_energy()
+                # Sample fission neutron energy from ENDF data
+                energy = self.sample_fission_energy(particle.energy, material)
 
                 secondary = Particle(
                     particle.position.copy(),
@@ -149,26 +146,42 @@ class PhysicsEngine:
 
         return np.array([dx, dy, dz])
 
-    def sample_fission_neutrons(self) -> int:
+    def sample_fission_neutrons(self, incident_energy: float, material: str) -> int:
         """
-        Sample number of fission neutrons (nu)
+        Sample number of fission neutrons (nu) from ENDF data
 
-        Uses Poisson distribution with DEFAULT_NU.
-        In reality, should use nubar from ENDF data.
-        """
-        return np.random.poisson(DEFAULT_NU)
+        Uses nubar data from ENDF for energy-dependent neutron yield.
+        Falls back to Poisson distribution with default value if data unavailable.
 
-    def sample_fission_energy(self) -> float:
-        """
-        Sample fission neutron energy
-
-        Uses simplified exponential + offset distribution.
-        Real implementation should use Watt spectrum from ENDF data.
+        Args:
+            incident_energy: Incident neutron energy in eV
+            material: Material undergoing fission
 
         Returns:
-            Energy in eV
+            Number of fission neutrons
         """
-        return np.random.exponential(FISSION_ENERGY_SCALE) + FISSION_ENERGY_MIN
+        # Get nubar from ENDF data
+        nubar = self.data_manager.get_nubar(material, incident_energy)
+
+        # Sample from Poisson distribution
+        return np.random.poisson(nubar)
+
+    def sample_fission_energy(self, incident_energy: float, material: str) -> float:
+        """
+        Sample fission neutron energy from ENDF data
+
+        Uses Watt spectrum or tabulated spectrum from ENDF data.
+        Falls back to simplified distribution if data unavailable.
+
+        Args:
+            incident_energy: Incident neutron energy in eV
+            material: Material undergoing fission
+
+        Returns:
+            Fission neutron energy in eV
+        """
+        # Get fission energy from ENDF data
+        return self.data_manager.sample_fission_energy(material, incident_energy)
 
     def get_velocity(self, energy: float) -> float:
         """

@@ -67,7 +67,12 @@ class PENDFParser:
                 'inelastic': np.array,
                 'capture': np.array,
                 'fission': np.array,
-                'nu': np.array
+                'nubar_energies': np.array,
+                'nubar_total': np.array,
+                'nubar_prompt': np.array,
+                'nubar_delayed': np.array,
+                'fission_spectrum_type': str,
+                'fission_spectrum_params': dict
             }
         """
         if not self.endf_parserpy_available:
@@ -81,12 +86,20 @@ class PENDFParser:
             parser = endf.EndfParserPy()
 
             # Parse the file with PENDF flavor
-            # Include only MF=3 (cross sections) for efficiency
+            # Include MF=1 (nubar), MF=3 (cross sections), MF=5 (fission spectrum)
             logger.info(f"Parsing PENDF file: {filepath}")
-            endf_dict = parser.parsefile(filepath, include=(3,))
+            endf_dict = parser.parsefile(filepath, include=(1, 3, 5))
 
             # Extract cross section data
             data = self._extract_cross_sections(endf_dict)
+
+            # Extract nubar data (MF=1)
+            nubar_data = self._extract_nubar(endf_dict)
+            data.update(nubar_data)
+
+            # Extract fission spectrum data (MF=5, MT=18)
+            fission_spectrum = self._extract_fission_spectrum(endf_dict)
+            data.update(fission_spectrum)
 
             logger.info(
                 f"Successfully parsed PENDF file with {len(data['energies'])} energy points"
@@ -243,6 +256,166 @@ class PENDFParser:
             logger.error(f"Error extracting TAB1 data: {e}")
             return np.array([]), np.array([])
 
+    def _extract_nubar(self, endf_dict: Dict) -> Dict:
+        """
+        Extract nubar (average neutrons per fission) from MF=1
+
+        Args:
+            endf_dict: Parsed ENDF data from endf-parserpy
+
+        Returns:
+            Dictionary with nubar data:
+            {
+                'nubar_energies': np.array,
+                'nubar_total': np.array,  # MT=452
+                'nubar_prompt': np.array,  # MT=456
+                'nubar_delayed': np.array  # MT=455
+            }
+        """
+        nubar_data = {
+            "nubar_energies": np.array([]),
+            "nubar_total": np.array([]),
+            "nubar_prompt": np.array([]),
+            "nubar_delayed": np.array([]),
+        }
+
+        # MF=1 contains multiplicities (nubar)
+        if 1 not in endf_dict:
+            logger.debug("No MF=1 (nubar) found in file")
+            return nubar_data
+
+        mf1 = endf_dict[1]
+
+        # MT=452: Total nubar (prompt + delayed)
+        if 452 in mf1:
+            energies, nubar = self._extract_tab1_data(mf1[452])
+            nubar_data["nubar_energies"] = energies
+            nubar_data["nubar_total"] = nubar
+            logger.debug(f"Extracted MT=452 (total nubar): {len(nubar)} points")
+
+        # MT=456: Prompt nubar
+        if 456 in mf1:
+            _, nubar = self._extract_tab1_data(mf1[456])
+            nubar_data["nubar_prompt"] = nubar
+            logger.debug(f"Extracted MT=456 (prompt nubar): {len(nubar)} points")
+
+        # MT=455: Delayed nubar
+        if 455 in mf1:
+            _, nubar = self._extract_tab1_data(mf1[455])
+            nubar_data["nubar_delayed"] = nubar
+            logger.debug(f"Extracted MT=455 (delayed nubar): {len(nubar)} points")
+
+        # If only prompt or only total is available, use that
+        if len(nubar_data["nubar_total"]) == 0 and len(nubar_data["nubar_prompt"]) > 0:
+            nubar_data["nubar_total"] = nubar_data["nubar_prompt"]
+            logger.debug("Using prompt nubar as total nubar")
+
+        return nubar_data
+
+    def _extract_fission_spectrum(self, endf_dict: Dict) -> Dict:
+        """
+        Extract fission neutron energy spectrum from MF=5, MT=18
+
+        The fission spectrum can be:
+        - Watt spectrum (LF=11): chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+        - Tabulated spectrum (LF=1): chi(E) as tabulated function
+        - Other representations
+
+        Args:
+            endf_dict: Parsed ENDF data from endf-parserpy
+
+        Returns:
+            Dictionary with fission spectrum data:
+            {
+                'fission_spectrum_type': 'watt' or 'tabulated' or 'none',
+                'fission_spectrum_params': dict with parameters or tabulated data
+            }
+        """
+        spectrum_data = {
+            "fission_spectrum_type": "none",
+            "fission_spectrum_params": {},
+        }
+
+        # MF=5 contains energy distributions
+        if 5 not in endf_dict:
+            logger.debug("No MF=5 (energy distributions) found in file")
+            return spectrum_data
+
+        mf5 = endf_dict[5]
+
+        # MT=18: Fission
+        if 18 not in mf5:
+            logger.debug("No MT=18 in MF=5 (fission spectrum)")
+            return spectrum_data
+
+        mt18 = mf5[18]
+
+        # Check the format (LF flag)
+        # LF=1: Tabulated spectrum
+        # LF=11: Watt spectrum
+        # LF=12: Madland-Nix spectrum
+
+        # Try to extract based on structure
+        # This depends on how endf-parserpy stores this data
+        try:
+            # Look for Watt spectrum parameters
+            if "NK" in mt18:  # Number of subsections
+                nk = mt18["NK"]
+                if nk > 0:
+                    # Try to find Watt parameters
+                    # Typically stored in subsections
+                    for key in mt18.keys():
+                        if "subsection" in str(key).lower() or isinstance(mt18[key], dict):
+                            subsec = mt18[key]
+                            if isinstance(subsec, dict):
+                                # Check for LF flag
+                                lf = subsec.get("LF", 0)
+
+                                if lf == 11:  # Watt spectrum
+                                    # Extract a and b parameters
+                                    # Format: a and b may be given as TAB1 (energy-dependent)
+                                    # or as constants
+                                    spectrum_data["fission_spectrum_type"] = "watt"
+
+                                    # Try to extract parameters
+                                    if "U" in subsec:  # U parameter (typically = a)
+                                        spectrum_data["fission_spectrum_params"]["a"] = subsec["U"]
+                                    if "theta" in subsec:  # theta parameter
+                                        spectrum_data["fission_spectrum_params"]["theta"] = subsec[
+                                            "theta"
+                                        ]
+
+                                    # For Watt: a and b parameters
+                                    # Sometimes given as CONT record
+                                    # Default Watt for U-235: a ≈ 0.988 MeV, b ≈ 2.249 MeV^-1
+
+                                    logger.info("Found Watt spectrum parameters")
+                                    break
+
+                                elif lf == 1:  # Tabulated
+                                    spectrum_data["fission_spectrum_type"] = "tabulated"
+                                    # Extract tabulated data
+                                    energies, chi = self._extract_tab1_data(subsec)
+                                    spectrum_data["fission_spectrum_params"] = {
+                                        "energies": energies,
+                                        "chi": chi,
+                                    }
+                                    logger.info(
+                                        f"Found tabulated fission spectrum with {len(energies)} points"
+                                    )
+                                    break
+
+            # If we didn't find anything, log available keys
+            if spectrum_data["fission_spectrum_type"] == "none":
+                logger.debug(
+                    f"Could not extract fission spectrum. Available keys in MT=18: {list(mt18.keys())}"
+                )
+
+        except Exception as e:
+            logger.warning(f"Error extracting fission spectrum: {e}")
+
+        return spectrum_data
+
     def _create_empty_data(self) -> Dict:
         """Create empty data structure"""
         return {
@@ -252,5 +425,10 @@ class PENDFParser:
             "inelastic": np.array([]),
             "capture": np.array([]),
             "fission": np.array([]),
-            "nu": np.array([]),
+            "nubar_energies": np.array([]),
+            "nubar_total": np.array([]),
+            "nubar_prompt": np.array([]),
+            "nubar_delayed": np.array([]),
+            "fission_spectrum_type": "none",
+            "fission_spectrum_params": {},
         }

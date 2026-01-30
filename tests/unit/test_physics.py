@@ -5,13 +5,7 @@ Unit tests for physics interactions
 import pytest
 import numpy as np
 from unittest.mock import Mock, MagicMock
-from picomc.physics import (
-    PhysicsEngine,
-    NEUTRON_MASS_ENERGY_FACTOR,
-    DEFAULT_NU,
-    FISSION_ENERGY_SCALE,
-    FISSION_ENERGY_MIN,
-)
+from picomc.physics import PhysicsEngine, NEUTRON_MASS_ENERGY_FACTOR
 from picomc.particle import Particle
 from picomc.data import NuclearDataManager
 
@@ -23,17 +17,6 @@ class TestPhysicsConstants:
         """Test neutron mass-energy factor is reasonable"""
         assert NEUTRON_MASS_ENERGY_FACTOR > 0
         assert NEUTRON_MASS_ENERGY_FACTOR < 1e-7
-
-    def test_default_nu(self):
-        """Test default fission neutron multiplicity"""
-        assert DEFAULT_NU > 0
-        assert DEFAULT_NU < 10
-
-    def test_fission_energy_constants(self):
-        """Test fission energy constants are reasonable"""
-        assert FISSION_ENERGY_SCALE > 0
-        assert FISSION_ENERGY_MIN > 0
-        assert FISSION_ENERGY_MIN < FISSION_ENERGY_SCALE * 5
 
 
 class TestPhysicsEngine:
@@ -98,18 +81,18 @@ class TestPhysicsEngine:
         assert -1.0 <= direction[1] <= 1.0
         assert -1.0 <= direction[2] <= 1.0
 
-    def test_sample_fission_neutrons_positive(self, physics_engine, random_seed):
+    def test_sample_fission_neutrons_positive(self, physics_engine, test_particle, random_seed):
         """Test that fission neutron count is positive"""
-        nu = physics_engine.sample_fission_neutrons()
+        nu = physics_engine.sample_fission_neutrons(test_particle.energy, "test_material")
         assert nu > 0
         assert isinstance(nu, (int, np.integer))
 
-    def test_sample_fission_energy_in_range(self, physics_engine, random_seed):
+    def test_sample_fission_energy_in_range(self, physics_engine, test_particle, random_seed):
         """Test that fission energy is in reasonable range"""
-        energy = physics_engine.sample_fission_energy()
-        assert energy >= FISSION_ENERGY_MIN
-        # Should be within a few standard deviations
-        assert energy < FISSION_ENERGY_MIN + 10 * FISSION_ENERGY_SCALE
+        energy = physics_engine.sample_fission_energy(test_particle.energy, "test_material")
+        # Fission energies typically between 0.1 and 10 MeV
+        assert energy > 0
+        assert energy < 20e6  # 20 MeV is very high for fission neutrons
 
     def test_get_velocity_calculation(self, physics_engine):
         """Test velocity calculation from energy"""
