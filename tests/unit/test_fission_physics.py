@@ -107,16 +107,16 @@ class TestFissionSpectrumData:
         spectrum = FissionSpectrumData()
         spectrum.spectrum_type = "watt"
 
-        # Test with larger 'a' (softer spectrum)
+        # Test with larger 'a' (higher mean energy)
         spectrum.params = {"a": 2.0e6, "b": 2.249e-6}
-        energies_soft = [spectrum.sample_energy() for _ in range(500)]
+        energies_high = [spectrum.sample_energy() for _ in range(500)]
 
-        # Test with smaller 'a' (harder spectrum)
+        # Test with smaller 'a' (lower mean energy)
         spectrum.params = {"a": 0.5e6, "b": 2.249e-6}
-        energies_hard = [spectrum.sample_energy() for _ in range(500)]
+        energies_low = [spectrum.sample_energy() for _ in range(500)]
 
-        # Softer spectrum should have higher mean energy
-        assert np.mean(energies_soft) > np.mean(energies_hard)
+        # Larger 'a' should have higher mean energy
+        assert np.mean(energies_high) > np.mean(energies_low)
 
 
 class TestNuclearDataManagerFission:

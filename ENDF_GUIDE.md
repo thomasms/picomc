@@ -40,10 +40,10 @@ PicoMC extracts and uses the following nuclear data from ENDF/PENDF files:
 Energy-dependent nubar data is used to sample the number of neutrons produced per fission event using a Poisson distribution.
 
 ### Fission Neutron Energy Spectrum (MF=5, MT=18)
-- **Watt Spectrum** (LF=11): chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+- **Watt Spectrum** (LF=11): χ(E) = C * exp(-E/a) * sinh(sqrt(b*E))
   - Parameters a and b are extracted from ENDF data
   - Default U-235: a = 0.988 MeV, b = 2.249 MeV⁻¹
-- **Tabulated Spectrum** (LF=1): Chi(E) as tabulated function
+- **Tabulated Spectrum** (LF=1): χ(E) as tabulated function
 
 The fission spectrum determines the energy distribution of neutrons born in fission events.
 
@@ -453,8 +453,8 @@ PicoMC uses real nuclear data from ENDF/PENDF files for accurate fission physics
 
 2. **Fission Spectrum** - Energy distribution of fission neutrons
    - Source: ENDF MF=5, MT=18
-   - **Watt Spectrum** (most common): chi(E) = C * exp(-E/a) * sinh(sqrt(b*E))
-   - **Tabulated**: Chi(E) from tabulated data
+   - **Watt Spectrum** (most common): χ(E) = C * exp(-E/a) * sinh(sqrt(b*E))
+   - **Tabulated**: χ(E) from tabulated data
    - Default U-235: a = 0.988 MeV, b = 2.249 MeV⁻¹
 
 ### Example: Fission Chain Reaction
@@ -610,13 +610,20 @@ Compare your results with published benchmarks:
 # Example: k-effective for critical assemblies
 
 # Run simulation
+initial_neutrons = 100
 sim.run()
 results = sim.get_results()
 
+# Get average nubar at typical energy
+typical_energy = 2.0e6  # eV
+mean_nubar = data_manager.get_nubar('U235_fuel', typical_energy)
+
 # Calculate multiplication factor
-k_eff = results['statistics']['fissions'] * mean_nubar / initial_neutrons
+total_fissions = results['statistics']['fissions']
+k_eff = (total_fissions * mean_nubar) / initial_neutrons
 
 print(f"k-effective: {k_eff:.4f}")
+print(f"Mean nubar used: {mean_nubar:.3f}")
 ```
 
 ### Notes on Data Quality
