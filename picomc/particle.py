@@ -3,7 +3,21 @@ Particle and event classes for Monte Carlo simulation
 """
 
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
+from enum import Enum
+
+
+class InteractionType(Enum):
+    """Enumeration of particle interaction types"""
+
+    ELASTIC = "elastic"
+    INELASTIC = "inelastic"
+    CAPTURE = "capture"
+    FISSION = "fission"
+    ESCAPE = "escape"
+
+    def __str__(self):
+        return self.value
 
 
 class Particle:
@@ -67,7 +81,7 @@ class Event:
     def __init__(
         self,
         particle: Particle,
-        interaction_type: str,
+        interaction_type: Union[InteractionType, str],
         position: np.ndarray,
         material: Optional[str] = None,
     ):
@@ -76,12 +90,20 @@ class Event:
 
         Args:
             particle: The particle involved in the event
-            interaction_type: Type of interaction (scatter, absorb, fission, escape)
+            interaction_type: Type of interaction (InteractionType enum or string for backward compat)
             position: Position where event occurred
             material: Material where event occurred
         """
         self.particle = particle
-        self.interaction_type = interaction_type
+        # Convert string to enum if needed for backward compatibility
+        if isinstance(interaction_type, str):
+            try:
+                self.interaction_type = InteractionType(interaction_type)
+            except ValueError:
+                # If not a valid enum value, keep as string
+                self.interaction_type = interaction_type
+        else:
+            self.interaction_type = interaction_type
         self.position = np.array(position, dtype=float)
         self.material = material
         self.secondary_particles = []

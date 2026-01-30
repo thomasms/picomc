@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 from unittest.mock import Mock, MagicMock
 from picomc.physics import PhysicsEngine, NEUTRON_MASS_ENERGY_FACTOR
-from picomc.particle import Particle
+from picomc.particle import Particle, InteractionType
 from picomc.data import NuclearDataManager
 
 
@@ -56,6 +56,7 @@ class TestPhysicsEngine:
         mock_dm.get_macroscopic_xs.return_value = {
             "total": 0.0,
             "elastic": 0.0,
+            "inelastic": 0.0,
             "capture": 0.0,
             "fission": 0.0,
         }
@@ -67,7 +68,12 @@ class TestPhysicsEngine:
     def test_sample_interaction_type_returns_valid(self, physics_engine, test_particle):
         """Test that interaction type is one of the valid options"""
         interaction = physics_engine.sample_interaction_type(test_particle, "test_material")
-        assert interaction in ["elastic", "capture", "fission"]
+        assert interaction in [
+            InteractionType.ELASTIC,
+            InteractionType.INELASTIC,
+            InteractionType.CAPTURE,
+            InteractionType.FISSION,
+        ]
 
     def test_sample_isotropic_direction(self, physics_engine):
         """Test isotropic direction sampling"""
@@ -109,35 +115,47 @@ class TestPhysicsEngine:
     def test_process_interaction_elastic(self, physics_engine, test_particle):
         """Test elastic scattering changes direction"""
         # Mock to always return elastic
-        physics_engine.sample_interaction_type = Mock(return_value="elastic")
+        physics_engine.sample_interaction_type = Mock(return_value=InteractionType.ELASTIC)
 
         original_energy = test_particle.energy
         event = physics_engine.process_interaction(test_particle, "test_material")
 
-        assert event.interaction_type == "elastic"
+        assert event.interaction_type == InteractionType.ELASTIC
         assert test_particle.energy == original_energy  # Energy unchanged in elastic
         assert test_particle.alive  # Particle still alive
 
     def test_process_interaction_capture(self, physics_engine, test_particle):
         """Test capture kills particle"""
         # Mock to always return capture
-        physics_engine.sample_interaction_type = Mock(return_value="capture")
+        physics_engine.sample_interaction_type = Mock(return_value=InteractionType.CAPTURE)
 
         event = physics_engine.process_interaction(test_particle, "test_material")
 
-        assert event.interaction_type == "capture"
+        assert event.interaction_type == InteractionType.CAPTURE
         assert not test_particle.alive  # Particle should be dead
 
     def test_process_interaction_fission(self, physics_engine, test_particle, random_seed):
         """Test fission creates secondaries"""
         # Mock to always return fission
-        physics_engine.sample_interaction_type = Mock(return_value="fission")
+        physics_engine.sample_interaction_type = Mock(return_value=InteractionType.FISSION)
 
         event = physics_engine.process_interaction(test_particle, "test_material")
 
-        assert event.interaction_type == "fission"
+        assert event.interaction_type == InteractionType.FISSION
         assert not test_particle.alive  # Particle should be dead
         assert len(event.secondary_particles) > 0  # Should have secondaries
+
+    def test_process_interaction_inelastic(self, physics_engine, test_particle, random_seed):
+        """Test inelastic scattering reduces energy"""
+        # Mock to always return inelastic
+        physics_engine.sample_interaction_type = Mock(return_value=InteractionType.INELASTIC)
+
+        original_energy = test_particle.energy
+        event = physics_engine.process_interaction(test_particle, "test_material")
+
+        assert event.interaction_type == InteractionType.INELASTIC
+        assert test_particle.energy < original_energy  # Energy reduced
+        assert test_particle.alive  # Particle still alive
 
     def test_hooks_are_called(self, physics_engine, test_particle):
         """Test that pre/post interaction hooks are called"""

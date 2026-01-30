@@ -5,6 +5,7 @@ These functions are extracted to be easily testable and mockable.
 """
 
 import numpy as np
+from picomc.particle import InteractionType
 
 
 def sample_exponential_distance(sigma_total: float) -> float:
@@ -25,35 +26,47 @@ def sample_exponential_distance(sigma_total: float) -> float:
 
 
 def sample_interaction_type_from_xs(
-    sigma_elastic: float, sigma_capture: float, sigma_fission: float, sigma_total: float
-) -> str:
+    sigma_elastic: float,
+    sigma_inelastic: float,
+    sigma_capture: float,
+    sigma_fission: float,
+    sigma_total: float,
+) -> InteractionType:
     """
     Sample interaction type based on cross sections
 
     Args:
         sigma_elastic: Elastic scattering cross section
+        sigma_inelastic: Inelastic scattering cross section
         sigma_capture: Capture cross section
         sigma_fission: Fission cross section
         sigma_total: Total cross section
 
     Returns:
-        Interaction type: 'elastic', 'capture', or 'fission'
+        Interaction type enum
     """
     if sigma_total <= 0:
-        return "elastic"
+        return InteractionType.ELASTIC
 
     xi = np.random.random()
 
-    # Normalize probabilities
-    p_elastic = sigma_elastic / sigma_total
-    p_capture = sigma_capture / sigma_total
+    # Normalize probabilities and accumulate
+    cumulative = 0.0
 
-    if xi < p_elastic:
-        return "elastic"
-    elif xi < p_elastic + p_capture:
-        return "capture"
-    else:
-        return "fission"
+    cumulative += sigma_elastic / sigma_total
+    if xi < cumulative:
+        return InteractionType.ELASTIC
+
+    cumulative += sigma_inelastic / sigma_total
+    if xi < cumulative:
+        return InteractionType.INELASTIC
+
+    cumulative += sigma_capture / sigma_total
+    if xi < cumulative:
+        return InteractionType.CAPTURE
+
+    # Remaining probability is fission
+    return InteractionType.FISSION
 
 
 def sample_isotropic_direction() -> np.ndarray:

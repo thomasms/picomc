@@ -6,6 +6,7 @@ These functions are tested with fixed random seeds for reproducibility.
 
 import pytest
 import numpy as np
+from picomc.particle import InteractionType
 from picomc.random_sampling import (
     sample_exponential_distance,
     sample_interaction_type_from_xs,
@@ -55,30 +56,46 @@ class TestInteractionTypeSampling:
 
     def test_only_elastic(self, random_seed):
         """Test when only elastic scattering is possible"""
-        interaction = sample_interaction_type_from_xs(1.0, 0.0, 0.0, 1.0)
-        assert interaction == "elastic"
+        interaction = sample_interaction_type_from_xs(1.0, 0.0, 0.0, 0.0, 1.0)
+        assert interaction == InteractionType.ELASTIC
+
+    def test_only_inelastic(self, random_seed):
+        """Test when only inelastic scattering is possible"""
+        interaction = sample_interaction_type_from_xs(0.0, 1.0, 0.0, 0.0, 1.0)
+        assert interaction == InteractionType.INELASTIC
 
     def test_only_capture(self, random_seed):
         """Test when only capture is possible"""
-        interaction = sample_interaction_type_from_xs(0.0, 1.0, 0.0, 1.0)
-        assert interaction in ["capture", "fission"]
+        interaction = sample_interaction_type_from_xs(0.0, 0.0, 1.0, 0.0, 1.0)
+        assert interaction == InteractionType.CAPTURE
 
     def test_only_fission(self, random_seed):
         """Test when only fission is possible"""
-        interaction = sample_interaction_type_from_xs(0.0, 0.0, 1.0, 1.0)
-        assert interaction == "fission"
+        interaction = sample_interaction_type_from_xs(0.0, 0.0, 0.0, 1.0, 1.0)
+        assert interaction == InteractionType.FISSION
 
     def test_zero_total_xs(self):
         """Test with zero total cross section"""
-        interaction = sample_interaction_type_from_xs(0.0, 0.0, 0.0, 0.0)
-        assert interaction == "elastic"
+        interaction = sample_interaction_type_from_xs(0.0, 0.0, 0.0, 0.0, 0.0)
+        assert interaction == InteractionType.ELASTIC
 
     def test_mixed_cross_sections(self, random_seed):
         """Test with mixed cross sections"""
-        interactions = [sample_interaction_type_from_xs(5.0, 3.0, 2.0, 10.0) for _ in range(100)]
+        interactions = [
+            sample_interaction_type_from_xs(5.0, 2.0, 2.0, 1.0, 10.0) for _ in range(100)
+        ]
 
         # All should be valid types
-        assert all(i in ["elastic", "capture", "fission"] for i in interactions)
+        assert all(
+            i
+            in [
+                InteractionType.ELASTIC,
+                InteractionType.INELASTIC,
+                InteractionType.CAPTURE,
+                InteractionType.FISSION,
+            ]
+            for i in interactions
+        )
 
         # Check we get some variety
         assert len(set(interactions)) > 1

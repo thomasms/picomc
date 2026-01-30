@@ -5,7 +5,7 @@ Main simulator orchestrator
 import numpy as np
 from collections import deque
 from typing import List, Optional
-from picomc.particle import Particle
+from picomc.particle import Particle, InteractionType
 from picomc.geometry import Geometry
 from picomc.physics import PhysicsEngine
 from picomc.transport import TransportEngine
@@ -129,11 +129,20 @@ class Simulator:
             # Process events and collect secondaries
             for event in events:
                 # Record statistics
-                if event.interaction_type == "escape":
+                if (
+                    event.interaction_type == InteractionType.ESCAPE
+                    or event.interaction_type == "escape"
+                ):
                     self.stats.record_escape()
-                elif event.interaction_type == "capture":
+                elif (
+                    event.interaction_type == InteractionType.CAPTURE
+                    or event.interaction_type == "capture"
+                ):
                     self.stats.record_absorption()
-                elif event.interaction_type == "fission":
+                elif (
+                    event.interaction_type == InteractionType.FISSION
+                    or event.interaction_type == "fission"
+                ):
                     self.stats.record_fission()
                     # Add secondary particles to bank
                     self.particle_bank.extend(event.secondary_particles)

@@ -18,6 +18,7 @@ class CrossSectionData:
         self.energies = np.array([])
         self.total = np.array([])
         self.elastic = np.array([])
+        self.inelastic = np.array([])
         self.capture = np.array([])
         self.fission = np.array([])
 
@@ -32,7 +33,13 @@ class CrossSectionData:
             Dictionary with cross section values (barns)
         """
         if len(self.energies) == 0:
-            return {"total": 0.0, "elastic": 0.0, "capture": 0.0, "fission": 0.0}
+            return {
+                "total": 0.0,
+                "elastic": 0.0,
+                "inelastic": 0.0,
+                "capture": 0.0,
+                "fission": 0.0,
+            }
 
         # Linear interpolation
         # Note: log-log interpolation could be added for better accuracy
@@ -40,11 +47,13 @@ class CrossSectionData:
         if len(self.energies) > 1:
             xs["total"] = np.interp(energy, self.energies, self.total)
             xs["elastic"] = np.interp(energy, self.energies, self.elastic)
+            xs["inelastic"] = np.interp(energy, self.energies, self.inelastic)
             xs["capture"] = np.interp(energy, self.energies, self.capture)
             xs["fission"] = np.interp(energy, self.energies, self.fission)
         else:
             xs["total"] = self.total[0] if len(self.total) > 0 else 0.0
             xs["elastic"] = self.elastic[0] if len(self.elastic) > 0 else 0.0
+            xs["inelastic"] = self.inelastic[0] if len(self.inelastic) > 0 else 0.0
             xs["capture"] = self.capture[0] if len(self.capture) > 0 else 0.0
             xs["fission"] = self.fission[0] if len(self.fission) > 0 else 0.0
 
@@ -267,6 +276,7 @@ class NuclearDataManager:
             xs_data.energies = pendf_data["energies"]
             xs_data.total = pendf_data.get("total", np.zeros_like(xs_data.energies))
             xs_data.elastic = pendf_data.get("elastic", np.zeros_like(xs_data.energies))
+            xs_data.inelastic = pendf_data.get("inelastic", np.zeros_like(xs_data.energies))
             xs_data.capture = pendf_data.get("capture", np.zeros_like(xs_data.energies))
             xs_data.fission = pendf_data.get("fission", np.zeros_like(xs_data.energies))
 
@@ -384,9 +394,10 @@ class NuclearDataManager:
         # Simplified cross sections (barns)
         # These are rough approximations for demonstration
         xs_data.elastic = np.array([10.0, 10.0, 8.0, 5.0, 3.0, 2.0, 1.5])
+        xs_data.inelastic = np.array([0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0])
         xs_data.capture = np.array([1000.0, 10.0, 3.0, 1.0, 0.5, 0.3, 0.2])
         xs_data.fission = np.array([0.0, 0.0, 0.5, 1.0, 1.2, 1.0, 0.8])
-        xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
+        xs_data.total = xs_data.elastic + xs_data.inelastic + xs_data.capture + xs_data.fission
 
         # Default nubar data (U-235-like)
         nubar_data = NubarData()

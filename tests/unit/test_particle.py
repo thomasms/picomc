@@ -4,7 +4,7 @@ Unit tests for particle and event classes
 
 import pytest
 import numpy as np
-from picomc.particle import Particle, Event
+from picomc.particle import Particle, Event, InteractionType
 
 
 class TestParticle:
@@ -94,7 +94,8 @@ class TestEvent:
         event = Event(test_particle, "elastic", position, material="uranium")
 
         assert event.particle == test_particle
-        assert event.interaction_type == "elastic"
+        # Event converts string to enum, so check value
+        assert event.interaction_type == InteractionType.ELASTIC
         assert np.allclose(event.position, position)
         assert event.material == "uranium"
         assert len(event.secondary_particles) == 0
@@ -123,11 +124,18 @@ class TestEvent:
 
     def test_event_interaction_types(self, test_particle):
         """Test various interaction types can be created"""
-        types = ["elastic", "capture", "fission", "escape"]
+        types = ["elastic", "inelastic", "capture", "fission", "escape"]
+        expected_enums = [
+            InteractionType.ELASTIC,
+            InteractionType.INELASTIC,
+            InteractionType.CAPTURE,
+            InteractionType.FISSION,
+            InteractionType.ESCAPE,
+        ]
 
-        for interaction_type in types:
+        for interaction_type, expected_enum in zip(types, expected_enums):
             event = Event(test_particle, interaction_type, test_particle.position.copy())
-            assert event.interaction_type == interaction_type
+            assert event.interaction_type == expected_enum
 
     def test_event_position_copy(self, test_particle):
         """Test that event position is independent of input"""

@@ -5,6 +5,7 @@ Unit tests for fission physics using real ENDF data
 import pytest
 import numpy as np
 from picomc.data import NubarData, FissionSpectrumData, NuclearDataManager
+from picomc.particle import InteractionType
 
 
 class TestNubarData:
@@ -232,13 +233,13 @@ class TestFissionPhysicsIntegration:
         )
 
         # Mock to always return fission
-        engine.sample_interaction_type = lambda p, m: "fission"
+        engine.sample_interaction_type = lambda p, m: InteractionType.FISSION
 
         # Process fission
         event = engine.process_interaction(particle, "fuel")
 
         # Check results
-        assert event.interaction_type == "fission"
+        assert event.interaction_type == InteractionType.FISSION
         assert not particle.alive  # Original particle should be dead
         assert len(event.secondary_particles) > 0  # Should have secondaries
 

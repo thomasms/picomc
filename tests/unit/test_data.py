@@ -16,9 +16,10 @@ class TestCrossSectionData:
         xs = CrossSectionData()
         xs.energies = sample_energies
         xs.elastic = sample_cross_sections["elastic"]
+        xs.inelastic = sample_cross_sections["inelastic"]
         xs.capture = sample_cross_sections["capture"]
         xs.fission = sample_cross_sections["fission"]
-        xs.total = xs.elastic + xs.capture + xs.fission
+        xs.total = xs.elastic + xs.inelastic + xs.capture + xs.fission
         return xs
 
     def test_empty_cross_section_data(self):
@@ -28,6 +29,7 @@ class TestCrossSectionData:
 
         assert result["total"] == 0.0
         assert result["elastic"] == 0.0
+        assert result["inelastic"] == 0.0
         assert result["capture"] == 0.0
         assert result["fission"] == 0.0
 
@@ -77,16 +79,18 @@ class TestCrossSectionData:
         xs = CrossSectionData()
         xs.energies = np.array([1.0e6])
         xs.elastic = np.array([5.0])
+        xs.inelastic = np.array([0.5])
         xs.capture = np.array([2.0])
         xs.fission = np.array([1.0])
-        xs.total = np.array([8.0])
+        xs.total = np.array([8.5])
 
         result = xs.get_xs_at_energy(1.0e6)
 
         assert result["elastic"] == 5.0
+        assert result["inelastic"] == 0.5
         assert result["capture"] == 2.0
         assert result["fission"] == 1.0
-        assert result["total"] == 8.0
+        assert result["total"] == 8.5
 
 
 class TestNuclearDataManager:
@@ -110,6 +114,7 @@ class TestNuclearDataManager:
 
         assert "total" in xs
         assert "elastic" in xs
+        assert "inelastic" in xs
         assert "capture" in xs
         assert "fission" in xs
         assert all(v >= 0 for v in xs.values())

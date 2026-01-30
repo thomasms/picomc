@@ -22,6 +22,7 @@ def sample_cross_sections():
     """Sample cross section data for testing"""
     return {
         "elastic": np.array([10.0, 10.0, 8.0, 5.0, 3.0, 2.0, 1.5]),
+        "inelastic": np.array([0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0]),
         "capture": np.array([1000.0, 10.0, 3.0, 1.0, 0.5, 0.3, 0.2]),
         "fission": np.array([0.0, 0.0, 0.1, 0.2, 0.3, 0.2, 0.1]),
     }

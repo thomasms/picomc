@@ -3,7 +3,7 @@ Physics interactions for neutron transport
 """
 
 import numpy as np
-from picomc.particle import Particle, Event
+from picomc.particle import Particle, Event, InteractionType
 from picomc.data import NuclearDataManager
 
 # Physical constants
@@ -50,7 +50,7 @@ class PhysicsEngine:
         xi = np.random.random()
         return -np.log(xi) / sigma_t
 
-    def sample_interaction_type(self, particle: Particle, material: str) -> str:
+    def sample_interaction_type(self, particle: Particle, material: str) -> InteractionType:
         """
         Sample type of interaction
 
@@ -59,23 +59,34 @@ class PhysicsEngine:
             material: Material particle is in
 
         Returns:
-            Interaction type: 'elastic', 'capture', or 'fission'
+            Interaction type enum value
         """
         xs = self.data_manager.get_macroscopic_xs(material, particle.energy)
 
         sigma_t = xs["total"]
         if sigma_t <= 0:
-            return "elastic"
+            return InteractionType.ELASTIC
 
         xi = np.random.random()
 
         # Sample interaction type based on relative cross sections
-        if xi < xs["elastic"] / sigma_t:
-            return "elastic"
-        elif xi < (xs["elastic"] + xs["capture"]) / sigma_t:
-            return "capture"
-        else:
-            return "fission"
+        # Accumulate probabilities
+        cumulative = 0.0
+
+        cumulative += xs["elastic"] / sigma_t
+        if xi < cumulative:
+            return InteractionType.ELASTIC
+
+        cumulative += xs["inelastic"] / sigma_t
+        if xi < cumulative:
+            return InteractionType.INELASTIC
+
+        cumulative += xs["capture"] / sigma_t
+        if xi < cumulative:
+            return InteractionType.CAPTURE
+
+        # Remaining probability is fission
+        return InteractionType.FISSION
 
     def process_interaction(self, particle: Particle, material: str) -> Event:
         """
@@ -95,18 +106,28 @@ class PhysicsEngine:
         interaction_type = self.sample_interaction_type(particle, material)
         event = Event(particle, interaction_type, particle.position.copy(), material)
 
-        if interaction_type == "elastic":
+        if interaction_type == InteractionType.ELASTIC:
             # Elastic scattering - change direction, may change energy
             new_direction = self.sample_isotropic_direction()
             particle.direction = new_direction
             # For now, keep energy same (elastic in CoM frame)
             # Could add energy loss for realistic scattering
 
-        elif interaction_type == "capture":
+        elif interaction_type == InteractionType.INELASTIC:
+            # Inelastic scattering - change direction and lose energy
+            new_direction = self.sample_isotropic_direction()
+            particle.direction = new_direction
+            # Sample energy loss (simplified - could use ENDF data for distributions)
+            # Typical inelastic leaves neutron with lower energy
+            # Simple model: reduce energy by 10-50%
+            energy_loss_fraction = 0.1 + 0.4 * np.random.random()
+            particle.energy *= 1.0 - energy_loss_fraction
+
+        elif interaction_type == InteractionType.CAPTURE:
             # Absorption - particle dies
             particle.alive = False
 
-        else:  # fission
+        elif interaction_type == InteractionType.FISSION:
             # Fission - particle dies, create secondaries
             particle.alive = False
             num_neutrons = self.sample_fission_neutrons(particle.energy, material)

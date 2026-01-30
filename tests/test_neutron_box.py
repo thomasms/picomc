@@ -33,9 +33,10 @@ def test_box_standard_geometry():
     xs_data = CrossSectionData()
     xs_data.energies = np.array([1e-5, 1e-2, 1.0, 100.0, 1e4, 1e6, 2e7])
     xs_data.elastic = np.array([10.0, 10.0, 8.0, 5.0, 3.0, 2.0, 1.5])
+    xs_data.inelastic = np.array([0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0])
     xs_data.capture = np.array([1000.0, 10.0, 3.0, 1.0, 0.5, 0.3, 0.2])
     xs_data.fission = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # No fission
-    xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
+    xs_data.total = xs_data.elastic + xs_data.inelastic + xs_data.capture + xs_data.fission
 
     dm.materials["test_material"] = {"xs_data": xs_data, "number_density": 0.05}
 
@@ -102,9 +103,10 @@ def test_box_csg_geometry():
     xs_data = CrossSectionData()
     xs_data.energies = np.array([1e-5, 1e-2, 1.0, 100.0, 1e4, 1e6, 2e7])
     xs_data.elastic = np.array([10.0, 10.0, 8.0, 5.0, 3.0, 2.0, 1.5])
+    xs_data.inelastic = np.array([0.0, 0.0, 0.0, 0.5, 1.0, 1.5, 2.0])
     xs_data.capture = np.array([1000.0, 10.0, 3.0, 1.0, 0.5, 0.3, 0.2])
     xs_data.fission = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    xs_data.total = xs_data.elastic + xs_data.capture + xs_data.fission
+    xs_data.total = xs_data.elastic + xs_data.inelastic + xs_data.capture + xs_data.fission
 
     dm.materials["csg_material"] = {"xs_data": xs_data, "number_density": 0.05}
 
